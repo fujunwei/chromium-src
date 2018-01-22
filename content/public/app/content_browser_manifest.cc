@@ -117,6 +117,7 @@ const service_manager::Manifest& GetContentBrowserManifest() {
           .RequireCapability("shape_detection", "barcode_detection")
           .RequireCapability("shape_detection", "face_detection")
           .RequireCapability("shape_detection", "text_detection")
+          .RequireCapability("ml", "neuralnetwork")
           .RequireCapability("file", "file:filesystem")
           .RequireCapability("file", "file:leveldb")
           .RequireCapability("network", "network_service")
@@ -174,7 +175,8 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "payments.mojom.PaymentManager",
                   "shape_detection.mojom.BarcodeDetectionProvider",
                   "shape_detection.mojom.FaceDetectionProvider",
-                  "shape_detection.mojom.TextDetection"})
+                  "shape_detection.mojom.TextDetection",
+                  "ml::mojom::NeuralNetwork"})
           .ExposeInterfaceFilterCapability_Deprecated(
               "navigation:dedicated_worker", "renderer",
               std::set<const char*>{
@@ -193,7 +195,8 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "payments.mojom.PaymentManager",
                   "shape_detection.mojom.BarcodeDetectionProvider",
                   "shape_detection.mojom.FaceDetectionProvider",
-                  "shape_detection.mojom.TextDetection"})
+                  "shape_detection.mojom.TextDetection",
+                  "ml::mojom::NeuralNetwork"})
           .ExposeInterfaceFilterCapability_Deprecated(
               "navigation:service_worker", "renderer",
               std::set<const char*>{
@@ -210,7 +213,8 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "payments.mojom.PaymentManager",
                   "shape_detection.mojom.BarcodeDetectionProvider",
                   "shape_detection.mojom.FaceDetectionProvider",
-                  "shape_detection.mojom.TextDetection"})
+                  "shape_detection.mojom.TextDetection",
+                  "ml::mojom::NeuralNetwork"})
           .ExposeInterfaceFilterCapability_Deprecated(
               "navigation:frame", "renderer",
               std::set<const char*>{
@@ -270,6 +274,7 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "media.mojom.Renderer",
                   "media.mojom.VideoDecodePerfHistory",
                   "mojom.ProcessInternalsHandler",
+                  "ml::mojom::NeuralNetwork",
                   "network.mojom.RestrictedCookieManager",
                   "blink.mojom.WebSocketConnector",
                   "payments.mojom.PaymentManager",
