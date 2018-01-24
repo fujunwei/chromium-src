@@ -50,6 +50,8 @@
 #include "third_party/blink/public/mojom/cookie_store/cookie_store.mojom.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
+#include "services/ml/public/interfaces/constants.mojom.h"
+#include "services/ml/public/interfaces/neuralnetwork.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -167,6 +169,9 @@ void ForwardServiceRequest(const char* service_name,
 // interface requests from frames, binders registered on the frame itself
 // override binders registered here.
 void RendererInterfaceBinders::InitializeParameterizedBinderRegistry() {
+  parameterized_binder_registry_.AddInterface(base::Bind(
+      &ForwardServiceRequest<ml::mojom::NeuralNetwork>,
+      ml::mojom::kServiceName));
   parameterized_binder_registry_.AddInterface(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   parameterized_binder_registry_.AddInterface(
