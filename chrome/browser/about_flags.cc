@@ -2110,6 +2110,9 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMacViewsTaskManagerDescription, kOsMac,
      FEATURE_VALUE_TYPE(features::kViewsTaskManager)},
 #endif  // OS_MACOSX
+    {"webml", flag_descriptions::kWebMlName,
+     flag_descriptions::kWebMlDescription, kOsAll,
+     FEATURE_VALUE_TYPE(features::kWebMl)},
 #if BUILDFLAG(ENABLE_VR)
     {"enable-webvr", flag_descriptions::kWebvrName,
      flag_descriptions::kWebvrDescription, kOsAll,
