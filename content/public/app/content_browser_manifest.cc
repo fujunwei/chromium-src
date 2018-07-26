@@ -176,7 +176,7 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "shape_detection.mojom.BarcodeDetectionProvider",
                   "shape_detection.mojom.FaceDetectionProvider",
                   "shape_detection.mojom.TextDetection",
-                  "ml::mojom::NeuralNetwork"})
+                  "ml.mojom.NeuralNetwork"})
           .ExposeInterfaceFilterCapability_Deprecated(
               "navigation:dedicated_worker", "renderer",
               std::set<const char*>{
@@ -196,7 +196,7 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "shape_detection.mojom.BarcodeDetectionProvider",
                   "shape_detection.mojom.FaceDetectionProvider",
                   "shape_detection.mojom.TextDetection",
-                  "ml::mojom::NeuralNetwork"})
+                  "ml.mojom.NeuralNetwork"})
           .ExposeInterfaceFilterCapability_Deprecated(
               "navigation:service_worker", "renderer",
               std::set<const char*>{
@@ -214,7 +214,7 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "shape_detection.mojom.BarcodeDetectionProvider",
                   "shape_detection.mojom.FaceDetectionProvider",
                   "shape_detection.mojom.TextDetection",
-                  "ml::mojom::NeuralNetwork"})
+                  "ml.mojom.NeuralNetwork"})
           .ExposeInterfaceFilterCapability_Deprecated(
               "navigation:frame", "renderer",
               std::set<const char*>{
