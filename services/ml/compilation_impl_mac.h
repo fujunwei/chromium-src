@@ -77,6 +77,7 @@ class CompilationImplMac : public mojom::Compilation {
   bool CompileReshape(OperationMac&);
   bool CompileConcatenation(OperationMac&);
   bool CompileArithmetic(OperationMac&);
+  bool CompileFullyConnected(OperationMac&);
 
   bool CompileConv2DBNNS(OperationMac&);
   bool CompileAverageOrMaxPool2DBNNS(OperationMac&);

@@ -106,23 +106,16 @@ namespace ml {
       int32_t filter_width, int32_t filter_height, int32_t depth_in,
       int32_t depth_out, int32_t stride_width, int32_t stride_height,
       const float* weights, const float* bias, MPSCNNNeuron* relu,
-      bool depthwise = false) {
-    const MPSCNNConvolutionDescriptor* desc;
-    if (depthwise) {
-      desc = [MPSCNNDepthWiseConvolutionDescriptor
+      int32_t type) {
+    Class descriptor_class = type == mojom::DEPTHWISE_CONV_2D ?
+        NSClassFromString(@"MPSCNNDepthWiseConvolutionDescriptor") :
+        NSClassFromString(@"MPSCNNConvolutionDescriptor");
+    const MPSCNNConvolutionDescriptor* desc = [descriptor_class
           cnnConvolutionDescriptorWithKernelWidth:filter_width
                                      kernelHeight:filter_height
                              inputFeatureChannels:depth_in
                             outputFeatureChannels:depth_out
                                      neuronFilter:relu];
-    } else {
-      desc = [MPSCNNConvolutionDescriptor
-          cnnConvolutionDescriptorWithKernelWidth:filter_width
-                                     kernelHeight:filter_height
-                             inputFeatureChannels:depth_in
-                            outputFeatureChannels:depth_out
-                                     neuronFilter:relu];
-    }
     desc.strideInPixelsX = stride_width;
     desc.strideInPixelsY = stride_height;
     desc.groups = 1;
@@ -131,10 +124,11 @@ namespace ml {
         initWithWeight:(float*)weights
                   bias:(float*)bias
                   desc:(MPSCNNConvolutionDescriptor*)desc];
-    MPSCNNConvolution* conv =
-        [[MPSCNNConvolution alloc] initWithDevice:GetMPSCNNContext().device
-                                          weights:data_source];
-    return conv;
+    Class convolution_class = type == mojom::FULLY_CONNECTED ?
+        NSClassFromString(@"MPSCNNFullyConnected") :
+        NSClassFromString(@"MPSCNNConvolution");
+    return [[convolution_class alloc] initWithDevice:GetMPSCNNContext().device
+                                             weights:data_source];
   }
 
   void API_AVAILABLE(macosx(10.13)) ComputeMPSOffsetForImplictPadding(
@@ -349,6 +343,8 @@ namespace ml {
         } else {
           success = CompileArithmetic(operation);
         }
+      } else if (type == mojom::FULLY_CONNECTED) {
+          success = CompileFullyConnected(operation);
       } else {
         DLOG(ERROR) << "Operation is not supported";
         success = false;
@@ -606,11 +602,11 @@ namespace ml {
         // VectorToString(depthwise_weights.data(), depthwise_weights.size());
         conv = CreateMPSCNNConvolution(
             filter_width, filter_height, depth_in, depth_out, stride_width,
-            stride_height, depthwise_weights.data(), bias, relu, depthwise);
+            stride_height, depthwise_weights.data(), bias, relu, operation.type);
       } else {
         conv = CreateMPSCNNConvolution(filter_width, filter_height, depth_in,
                                        depth_out, stride_width, stride_height,
-                                       weights, bias, relu, depthwise);
+                                       weights, bias, relu, operation.type);
       }
 
       MPSOffset offset;
@@ -638,6 +634,51 @@ namespace ml {
       operation.mpscnn_kernel.reset(conv);
     }
 
+    return true;
+  }
+
+  bool CompilationImplMac::CompileFullyConnected(OperationMac& operation) {
+    // operation.inputs[0] is the index of input in operands_.
+    OperandMac& input = operands_[operation.inputs[0]];
+    if (input.dimensions.size() < 2) {
+      DLOG(ERROR) << "A tenosr of least rank 2.";
+      return false;
+    }
+    
+    // If rank is greater than 2, then it gets flattened to a 2-D Tensor.
+    // input_size corresponds to the number of inputs to the layer, matching
+    // the second dimension of weights.
+    // It is the same as input.dimensions[1] in 2-d inputs.
+    // inputs[1] is index of weights.
+    // operands_[inputs[1]].dimensions[1] is the second dimension of weights.
+    const std::vector<uint32_t>& inputs = operation.inputs;
+    // batch_size is calculated by dividing the number of elements by input_size.
+    int32_t input_size = operands_[inputs[1]].dimensions[1];
+    input.dimensions = std::vector<uint32_t>({product(input.dimensions) / input_size,
+          input_size});
+
+    if (@available(macOS 10.13, *)) {
+      operation.fuse_code = getScalarInt32(values_[inputs[3]], memory_.get());
+      MPSCNNNeuron* relu = CreateMPSCNNNeuron(operation.fuse_code);
+    
+      // inputs[1] is index of weights, values_.at(inputs[1]) is value info of
+      // weights.
+      const float* source_weights = reinterpret_cast<const float*>(
+          memory_.get() + values_.at(inputs[1]).offset);
+      // inputs[2] is index of bias, values_.at(inputs[2]) is value info of
+      // bias.
+      const float* source_bias = reinterpret_cast<const float*>(
+          memory_.get() + values_.at(inputs[2]).offset);
+      
+      // the output_size is the same as first dimension of weights.
+      int32_t output_size = operands_[operation.outputs[0]].dimensions[1];
+      operation.mpscnn_kernel.reset(CreateMPSCNNConvolution(1, 1, input_size,
+                                                            output_size, 1,
+                                                            1, source_weights,
+                                                            source_bias, relu,
+                                                            operation.type));
+    }
+  
     return true;
   }
 
