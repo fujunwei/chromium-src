@@ -75,17 +75,19 @@
 
 @implementation CustomPadding
 
-@synthesize offset_;
+@synthesize offset = _offset;
 
-@synthesize edge_mode_;
+@synthesize clipRect = _clipRect;
 
-@synthesize num_;
+@synthesize edge_mode = _edge_mode;
 
-@synthesize width_;
+@synthesize num = _num;
 
-@synthesize height_;
+@synthesize width = _width;
 
-@synthesize channels_;
+@synthesize height = _height;
+
+@synthesize channels = _channels;
 
 + (BOOL)supportsSecureCoding {
   return YES;
@@ -106,12 +108,30 @@
               height:(uint32_t)height
             channels:(uint32_t)channels {
   self = [super init];
-  self.offset_ = offset;
-  self.edge_mode_ = edgeMode;
-  self.num_ = num;
-  self.width_ = width;
-  self.height_ = height;
-  self.channels_ = channels;
+  self.offset = offset;
+  self.edge_mode = edgeMode;
+  self.num = num;
+  self.width = width;
+  self.height = height;
+  self.channels = channels;
+  return self;
+}
+
+- (id)initWithClipRect:(MTLRegion)clipRect
+                offset:(MPSOffset)offset
+              edgeMode:(MPSImageEdgeMode)edgeMode
+                   num:(uint32_t)num
+                 width:(uint32_t)width
+                height:(uint32_t)height
+              channels:(uint32_t)channels {
+  self = [super init];
+  self.clipRect = clipRect;
+  self.offset = offset;
+  self.edge_mode = edgeMode;
+  self.num = num;
+  self.width = width;
+  self.height = height;
+  self.channels = channels;
   return self;
 }
 
@@ -126,15 +146,18 @@ destinationImageDescriptorForSourceImages:(NSArray<MPSImage*>*)sourceImages
                       suggestedDescriptor:(MPSImageDescriptor*)inDescriptor {
   if ([kernel isKindOfClass:[MPSCNNKernel class]]) {
     MPSCNNKernel* cnn_kernel = (MPSCNNKernel*)kernel;
-    [cnn_kernel setOffset:offset_];
-    [cnn_kernel setEdgeMode:edge_mode_];
+    [cnn_kernel setOffset:_offset];
+    [cnn_kernel setEdgeMode:_edge_mode];
+    if (_clipRect.size.height > 0 && _clipRect.size.width > 0) {
+      [cnn_kernel setClipRect:_clipRect];
+    }
   }
 
   [inDescriptor setChannelFormat:MPSImageFeatureChannelFormatFloat16];
-  [inDescriptor setNumberOfImages:num_];
-  [inDescriptor setWidth:width_];
-  [inDescriptor setHeight:height_];
-  [inDescriptor setFeatureChannels:channels_];
+  [inDescriptor setNumberOfImages:_num];
+  [inDescriptor setWidth:_width];
+  [inDescriptor setHeight:_height];
+  [inDescriptor setFeatureChannels:_channels];
   [inDescriptor
       setUsage:MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite];
 

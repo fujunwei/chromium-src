@@ -199,6 +199,9 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
 
   bool success = true, new_graph = false;
   std::vector<uint32_t> graph_outputs, current_graph_inputs;
+#if defined(DEEP_LAB_WORK_AROUND)
+  uint32_t image_node_index = 10000;
+#endif
   for (size_t i = 0; i < operations_.size(); ++i) {
     OperationMac& operation = operations_[i];
     uint32_t type = operation.type;
@@ -235,9 +238,18 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     }
 
     DCHECK(outputs.size() == 1);
-    if (type == mojom::CONV_2D || type == mojom::DEPTHWISE_CONV_2D) {
+    if (type == mojom::CONV_2D ||
+        type == mojom::DEPTHWISE_CONV_2D ||
+        type == mojom::ATROUS_CONV_2D ||
+        type == mojom::ATROUS_DEPTHWISE_CONV_2D) {
       success = CompileConv2DOrDepthwiseConv2D(mps_image_nodes_, operation,
-                                               values_, memory_, operands_);
+                                               values_, memory_, operands_
+#if defined(DEEP_LAB_WORK_AROUND)
+                                               , graph_outputs,
+                                               current_graph_inputs,
+                                               image_node_index
+#endif
+                                               );
     } else if (type == mojom::AVERAGE_POOL_2D || type == mojom::MAX_POOL_2D) {
       success = CompileAverageOrMaxPool2D(mps_image_nodes_, operation, values_,
                                           memory_, operands_);

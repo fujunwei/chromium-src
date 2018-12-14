@@ -12,9 +12,12 @@
 #include "services/ml/common.h"
 #include "services/ml/ml_utils_mac.h"
 
+#define DEEP_LAB_WORK_AROUND 1
+
 class CompilationImplMac;
 @class MPSNNImageNode;
 @class MPSImageDescriptor;
+@class MPSCNNNeuron;
 
 namespace ml {
 
@@ -24,7 +27,13 @@ bool CompileConv2DOrDepthwiseConv2D(
     const OperationMac&,
     const std::map<uint32_t, ValueInfo>& values,
     std::unique_ptr<int8_t[]>& memory,
-    const std::vector<OperandMac>& operands);
+    const std::vector<OperandMac>& operands,
+#if defined(DEEP_LAB_WORK_AROUND)
+    std::vector<uint32_t>& graph_outputs,
+    std::vector<uint32_t>& current_graph_inputs,
+    uint32_t& image_node_index
+#endif
+);
 
 API_AVAILABLE(macosx(10.13))
 bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
@@ -71,6 +80,25 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                           const std::vector<OperandMac>& operands,
                           const std::map<uint32_t, ValueInfo>& values,
                           const std::unique_ptr<int8_t[]>& memory);
+
+API_AVAILABLE(macosx(10.13))
+bool CompileDeeplabDepthwise(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                             const OperationMac& operation,
+                             std::vector<uint32_t>& graph_outputs,
+                             std::vector<uint32_t>& current_graph_inputs,
+                             uint32_t& image_node_index,
+                             std::vector<float>& depthwise_weights,
+                             int32_t filter_width,
+                             int32_t filter_height,
+                             int32_t output_width,
+                             int32_t output_height,
+                             int32_t depth_in,
+                             int32_t depth_out,
+                             int32_t stride_width,
+                             int32_t stride_height,
+                             const float* weights,
+                             const float* bias,
+                             MPSCNNNeuron* relu);
 }  // namespace ml
 
 #endif  // SERVICES_ML_COMPILATION_IMPL_MAC_MPS_H_

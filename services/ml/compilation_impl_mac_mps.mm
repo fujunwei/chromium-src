@@ -49,9 +49,12 @@ MPSCNNConvolutionNode* CreateMPSCNNConvolutionNode(MPSNNImageNode* image_node,
                                                    const float* weights,
                                                    const float* bias,
                                                    MPSCNNNeuron* relu,
-                                                   int32_t type) {
+                                                   int32_t type,
+                                                   int32_t dilation_x = 1,
+                                                   int32_t dilation_y = 1) {
   Class descriptor_class =
-      type == mojom::DEPTHWISE_CONV_2D
+      (type == mojom::DEPTHWISE_CONV_2D ||
+          type == mojom::ATROUS_DEPTHWISE_CONV_2D)
           ? NSClassFromString(@"MPSCNNDepthWiseConvolutionDescriptor")
           : NSClassFromString(@"MPSCNNConvolutionDescriptor");
   const MPSCNNConvolutionDescriptor* desc =
@@ -62,6 +65,8 @@ MPSCNNConvolutionNode* CreateMPSCNNConvolutionNode(MPSNNImageNode* image_node,
                                                    neuronFilter:relu];
   desc.strideInPixelsX = stride_width;
   desc.strideInPixelsY = stride_height;
+  desc.dilationRateX = dilation_x;
+  desc.dilationRateY = dilation_y;
   desc.groups = 1;
 
   auto data_source = [[ConvDataSource alloc]
@@ -110,10 +115,15 @@ bool CompileConv2DOrDepthwiseConv2D(
     const OperationMac& operation,
     const std::map<uint32_t, ValueInfo>& values,
     std::unique_ptr<int8_t[]>& memory,
-    const std::vector<OperandMac>& operands) {
-  DLOG(INFO) << "CompilationImplMac::CompileConv2DOrDepthwiseConv2D";
-  DLOG_IF(FATAL, operation.type != mojom::CONV_2D &&
-                     operation.type != mojom::DEPTHWISE_CONV_2D);
+    const std::vector<OperandMac>& operands,
+#if defined(DEEP_LAB_WORK_AROUND)
+    std::vector<uint32_t>& graph_outputs,
+    std::vector<uint32_t>& current_graph_inputs,
+    uint32_t& image_node_index
+#endif
+                                  ) {
+  DLOG(INFO) << "CompilationImplMac::CompileConv2DOrDepthwiseConv2D "
+      << operation.type;
   int32_t input_batch_size, input_width, input_height, output_width,
       output_height;
   bool implicit_padding;
@@ -121,7 +131,8 @@ bool CompileConv2DOrDepthwiseConv2D(
   int32_t stride_width, stride_height;
   int32_t padding_code, fuse_code;
   int32_t depth_out, filter_height, filter_width, depth_in;
-  bool depthwise = (operation.type == mojom::DEPTHWISE_CONV_2D);
+  bool depthwise = (operation.type == mojom::DEPTHWISE_CONV_2D ||
+                    operation.type == mojom::ATROUS_DEPTHWISE_CONV_2D);
   int32_t depthwise_multiplier = 1;
 
   std::vector<uint32_t> inputs = operation.inputs;
@@ -136,21 +147,14 @@ bool CompileConv2DOrDepthwiseConv2D(
           depth_in, depthwise_multiplier, depthwise))
     return false;
 
-  DLOG(INFO) << "  implicit_padding: " << implicit_padding;
-  if (implicit_padding) {
-    DLOG(INFO) << "  padding_code: " << padding_code;
-  } else {
-    DLOG(INFO) << "  padding_left: " << padding_left;
-    DLOG(INFO) << "  padding_right: " << padding_right;
-    DLOG(INFO) << "  padding_top: " << padding_top;
-    DLOG(INFO) << "  padding_bottom: " << padding_bottom;
+  uint32_t dilation_x = 1, dilation_y = 1;
+  if (operation.type == mojom::ATROUS_DEPTHWISE_CONV_2D ||
+      operation.type == mojom::ATROUS_CONV_2D) {
+    dilation_x = stride_width;
+    dilation_y = stride_height;
+    stride_width = 1;
+    stride_height = 1;
   }
-  DLOG(INFO) << "  stride_width: " << stride_width;
-  DLOG(INFO) << "  stride_height: " << stride_height;
-  if (depthwise) {
-    DLOG(INFO) << "  depthwise_multiplier: " << depthwise_multiplier;
-  }
-  DLOG(INFO) << "  fuse_code: " << fuse_code;
 
   MPSCNNNeuron* relu = CreateMPSCNNNeuron(fuse_code);
 
@@ -160,7 +164,6 @@ bool CompileConv2DOrDepthwiseConv2D(
   const float* bias =
       reinterpret_cast<const float*>(memory.get() + bias_value_info.offset);
 
-  MPSCNNConvolutionNode* conv_node;
   MPSNNImageNode* input_image = image_nodes[inputs[0]];
   if (depthwise) {
     if (depth_out != depth_in * depthwise_multiplier) {
@@ -189,15 +192,24 @@ bool CompileConv2DOrDepthwiseConv2D(
         }
       }
     }
+#if defined(DEEP_LAB_WORK_AROUND)
+    if (dilation_x * dilation_y == 1 && input_width * input_height == 28 * 28 &&
+        (filter_height * filter_width == 5 * 5 ||
+            filter_height * filter_width == 9 * 9)) {
+      CompileDeeplabDepthwise(image_nodes, operation, graph_outputs,
+                              current_graph_inputs, image_node_index,
+                              depthwise_weights, filter_width, filter_height,
+                              output_width, output_height, depth_in, depth_out,
+                              stride_width, stride_height, weights, bias, relu);
+      return true;
+    }
+#endif
     memcpy(weights, depthwise_weights.data(), weights_value_info.length);
-    conv_node = CreateMPSCNNConvolutionNode(
-        input_image, filter_width, filter_height, depth_in, depth_out,
-        stride_width, stride_height, weights, bias, relu, operation.type);
-  } else {
-    conv_node = CreateMPSCNNConvolutionNode(
-        input_image, filter_width, filter_height, depth_in, depth_out,
-        stride_width, stride_height, weights, bias, relu, operation.type);
   }
+  MPSCNNConvolutionNode* conv_node = CreateMPSCNNConvolutionNode(
+      input_image, filter_width, filter_height, depth_in, depth_out,
+      stride_width, stride_height, weights, bias, relu, operation.type,
+      dilation_x, dilation_y);
 
   MPSOffset offset;
   if (implicit_padding) {
@@ -608,6 +620,147 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
           integerScaleFactorY:scale_factorY
                  alignCorners:true];
   image_nodes[operation.outputs[0]] = bilinear_scale_node.resultImage;
+
+  return true;
+}
+
+API_AVAILABLE(macosx(10.13))
+bool CompileDeeplabDepthwise(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                             const OperationMac& operation,
+                             std::vector<uint32_t>& graph_outputs,
+                             std::vector<uint32_t>& current_graph_inputs,
+                             uint32_t& image_node_index,
+                             std::vector<float>& depthwise_weights,
+                             int32_t filter_width,
+                             int32_t filter_height,
+                             int32_t output_width,
+                             int32_t output_height,
+                             int32_t depth_in,
+                             int32_t depth_out,
+                             int32_t stride_width,
+                             int32_t stride_height,
+                             const float* weights,
+                             const float* bias,
+                             MPSCNNNeuron* relu) {
+  // 28 * 28 = > 32 * 28 with  1 * 1 depthwise conv and zero bias.
+  float* zero_bias = (float*)calloc(depth_out, sizeof(float));
+  float* one_by_one_weights = (float*)calloc(depth_out, sizeof(float));
+  // memset(one_by_one_weights, 1.0, sizeof(float)) isn't 1.0
+  for (auto i = 0; i < depth_out; i++) {
+    one_by_one_weights[i] = 1.0f;
+  }
+
+  std::vector<uint32_t> inputs = operation.inputs;
+  std::vector<uint32_t> outputs = operation.outputs;
+  // Add a new graph.
+  graph_outputs.push_back(inputs[0]);
+  current_graph_inputs.clear();
+
+  MPSNNImageNode* export_image_node = image_nodes[inputs[0]];
+  TemporaryImageHandle* input_handle = [[TemporaryImageHandle alloc]
+      initWithLabel:[NSString stringWithFormat:@"%d", inputs[0]]];
+  export_image_node.exportFromGraph = true;
+  export_image_node.handle = input_handle;
+
+  // Create a placeholder for input image, but mps_image_nodes_[inputs[0]]
+  // doesn't need reuse in new graph that does not need to reset.
+  MPSNNImageNode* new_image_node =
+      [[MPSNNImageNode alloc] initWithHandle:input_handle];
+
+  // no rule operation, relu => nullptr
+  MPSCNNConvolutionNode* padding_depth_conv_node = CreateMPSCNNConvolutionNode(
+      new_image_node, 1, 1, depth_in, depth_out, 1, 1, one_by_one_weights,
+      zero_bias, nullptr, mojom::DEPTHWISE_CONV_2D);
+  MPSOffset offset;
+  offset.x = 0;
+  offset.y = 0;
+  offset.z = 0;
+  uint32_t padded_width = output_width, clip_x = 0;
+  if (filter_height * filter_width == 5 * 5) {
+    padded_width = output_width + 4;
+    clip_x = 2;
+  } else if (filter_height * filter_width == 9 * 9) {
+    padded_width = output_width + 8;
+    clip_x = 4;
+  }
+  [padding_depth_conv_node
+      setPaddingPolicy:[[CustomPadding alloc]
+                           initWithClipRect:MTLRegionMake2D(clip_x, 0,
+                                                            output_width,
+                                                            output_height)
+                                     offset:offset
+                                   edgeMode:MPSImageEdgeModeZero
+                                        num:1
+                                      width:padded_width
+                                     height:output_height
+                                   channels:depth_out]];
+  image_nodes[image_node_index] = padding_depth_conv_node.resultImage;
+  TemporaryImageHandle* padded_output_handle = [[TemporaryImageHandle alloc]
+      initWithLabel:[NSString stringWithFormat:@"%d", image_node_index]];
+  image_nodes[image_node_index].handle = padded_output_handle;
+  image_nodes[image_node_index].exportFromGraph = true;
+  graph_outputs.push_back(image_node_index);
+  image_node_index++;
+
+  NSMutableArray<MPSNNImageNode*>* image_array =
+      [NSMutableArray arrayWithCapacity:1];
+  MPSNNBinaryArithmeticNode* arithmetic_node = nullptr;
+  MPSCNNConvolutionNode* depth_conv_node;
+  for (auto length = 0; length < filter_width; length++) {
+    float* one_rol_weights =
+        (float*)calloc(filter_height * depth_out, sizeof(float));
+    uint32_t index = 0;
+    for (auto c = 0; c < depth_out; ++c) {
+      for (auto h = 0; h < filter_height; ++h) {
+        for (auto w = 0; w < filter_width; ++w) {
+          if (w == length) {
+            one_rol_weights[index] =
+                depthwise_weights[c * filter_width * filter_height +
+                                  h * filter_width + w];
+            index++;
+            // this need to break when all of one rols has found.
+          }
+        }
+      }
+    }
+
+    // Create a placeholder for input image, but mps_image_nodes_[inputs[0]]
+    // doesn't need reuse in new graph that does not need to reset.
+    MPSNNImageNode* new_image_node =
+        [[MPSNNImageNode alloc] initWithHandle:padded_output_handle];
+    const float* new_bias = length == 0 ? bias : zero_bias;
+    // no rule operation, relu => nullptr
+    depth_conv_node = CreateMPSCNNConvolutionNode(
+        new_image_node, 1, filter_height, depth_in, depth_out, stride_width,
+        stride_height, one_rol_weights, new_bias, nullptr,
+        mojom::DEPTHWISE_CONV_2D);
+
+    offset.x = length;
+    [depth_conv_node setPaddingPolicy:[[CustomPadding alloc]
+                                          initWithOffset:offset
+                                                edgeMode:MPSImageEdgeModeZero
+                                                     num:1
+                                                   width:output_width
+                                                  height:output_height
+                                                channels:depth_out]];
+
+    if (length == 0) {
+      [image_array addObject:depth_conv_node.resultImage];
+    } else if (length == 1) {
+      [image_array addObject:depth_conv_node.resultImage];
+      arithmetic_node = [[MPSNNAdditionNode alloc] initWithSources:image_array];
+    } else if (length >= 1) {
+      image_array = [NSMutableArray arrayWithCapacity:1];
+      [image_array addObject:arithmetic_node.resultImage];
+      [image_array addObject:depth_conv_node.resultImage];
+      arithmetic_node = [[MPSNNAdditionNode alloc] initWithSources:image_array];
+    }
+  }
+  // Add rule operation at last node.
+  MPSCNNNeuronNode* relu_node =
+      [[MPSCNNNeuronReLUNode alloc] initWithSource:arithmetic_node.resultImage
+                                                 a:0];
+  image_nodes[outputs[0]] = relu_node.resultImage;
 
   return true;
 }

@@ -11,8 +11,11 @@
 API_AVAILABLE(macosx(10.13))
 @interface ConvDataSource : NSObject<MPSCNNConvolutionDataSource>
 
+// The type of each entry in array is given by -dataType that is
+// MPSDataTypeFloat32 now, but may be ut will be heavy for compute.
 @property(nonatomic, assign) float* weights_;
 
+// bias terms are always float, even when the weights are not.
 @property(nonatomic, assign) float* bias_;
 
 @property(nonatomic, assign) MPSCNNConvolutionDescriptor* desc_;
@@ -26,17 +29,19 @@ API_AVAILABLE(macosx(10.13))
 API_AVAILABLE(macosx(10.13))
 @interface CustomPadding : NSObject<MPSNNPadding>
 
-@property(nonatomic, assign) MPSOffset offset_;
+@property(nonatomic, assign) MPSOffset offset;
 
-@property(nonatomic, assign) MPSImageEdgeMode edge_mode_;
+@property(nonatomic, assign) MTLRegion clipRect;
 
-@property(nonatomic, assign) uint32_t num_;
+@property(nonatomic, assign) MPSImageEdgeMode edge_mode;
 
-@property(nonatomic, assign) uint32_t width_;
+@property(nonatomic, assign) uint32_t num;
 
-@property(nonatomic, assign) uint32_t height_;
+@property(nonatomic, assign) uint32_t width;
 
-@property(nonatomic, assign) uint32_t channels_;
+@property(nonatomic, assign) uint32_t height;
+
+@property(nonatomic, assign) uint32_t channels;
 
 - (id)initWithOffset:(MPSOffset)offset
             edgeMode:(MPSImageEdgeMode)edgeMode
@@ -45,6 +50,13 @@ API_AVAILABLE(macosx(10.13))
               height:(uint32_t)height
             channels:(uint32_t)channels;
 
+- (id)initWithClipRect:(MTLRegion)clipRect
+                offset:(MPSOffset)offset
+              edgeMode:(MPSImageEdgeMode)edgeMode
+                   num:(uint32_t)num
+                 width:(uint32_t)width
+                height:(uint32_t)height
+              channels:(uint32_t)channels;
 @end
 
 API_AVAILABLE(macosx(10.13))
