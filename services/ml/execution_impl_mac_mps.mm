@@ -198,11 +198,10 @@ void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
         }
 
         std::map<uint32_t, MPSImage*> output_mps_images;
+        // temporary_mps_images lifecycle is controled by readcount that isn't
+        // need scoped_nsobject.
         std::map<uint32_t, MPSImage*> temporary_mps_images;
         for (size_t i = 0; i < compilation_->graphs_.size(); i++) {
-          // temporary_inputs_[i -1] is the temporary input image index.
-          // temporary_mps_images[temporary_inputs_[i -1]] is temporary input
-          // image.
           NSMutableArray<MPSImage*>* source_images;
           if (i == 0) {
             // image_array is First graph
@@ -211,10 +210,8 @@ void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
             source_images = [NSMutableArray arrayWithCapacity:1];
             NSArray<id<MPSHandle>>* source_image_handles =
                 compilation_->graphs_[i].get().sourceImageHandles;
-            if (source_image_handles.count) {
-              // There are only one paramters for new graph.
-              DCHECK(source_image_handles.count == 1);
-              uint32_t input_index = [source_image_handles[0].label intValue];
+            for (id handle in source_image_handles) {
+              uint32_t input_index = [[handle label] intValue];
               // Find temporary input images of next graph.
               [source_images addObject:temporary_mps_images[input_index]];
             }
@@ -232,8 +229,20 @@ void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
           SaveTemporaryImages(temporary_mps_images, intermediate_images);
           // The order of graph is not the same as compilation_->output_.
           uint32_t output_index = [graph_output_image.label intValue];
-          output_mps_images[output_index] = graph_output_image;
+          // It's temporary mps image if the output_index is not in compilation_
+          // ->outputs_ list.
+          bool last_node = false;
+          for (auto index : compilation_->outputs_) {
+            if (output_index == index)
+              last_node = true;
+          }
+          if (last_node) {
+            output_mps_images[output_index] = graph_output_image;
+          } else {
+            temporary_mps_images[output_index] = graph_output_image;
+          }
         }
+        DCHECK(output_mps_images.size() == compilation_->outputs_.size());
 
         for (size_t i = 0; i < compilation_->outputs_.size(); ++i) {
           MPSImage* output_img = output_mps_images[compilation_->outputs_[i]];

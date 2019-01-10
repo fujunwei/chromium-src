@@ -438,7 +438,8 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                        const OperationMac& operation,
                        std::vector<uint32_t>& constants,
                        const std::map<uint32_t, ValueInfo>& values,
-                       const std::unique_ptr<int8_t[]>& memory) {
+                       const std::unique_ptr<int8_t[]>& memory,
+                       std::vector<uint32_t>& current_graph_inputs) {
   DLOG(INFO) << "CompilationImplMac::CompileArithmetic";
   DLOG_IF(FATAL, operation.type != mojom::ADD && operation.type != mojom::MUL);
 
@@ -454,26 +455,37 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
           [[MPSNNImageNode alloc] initWithHandle:nullptr];
       [image_array addObject:image_node];
     } else {
-      [image_array addObject:image_nodes[operation.inputs[i]]];
+      bool export_image = true;
+      for (size_t j = 0; j < current_graph_inputs.size(); j++) {
+        if (operation.inputs[i] == current_graph_inputs[j]) {
+          export_image = false;
+          break;
+        }
+      }
+      MPSNNImageNode* new_image_node = nullptr;
+      if (export_image) {
+        MPSNNImageNode* export_image_node = image_nodes[operation.inputs[i]];
+        export_image_node.exportFromGraph = true;
+        TemporaryImageHandle* input_handle = [[TemporaryImageHandle alloc]
+            initWithLabel:[NSString
+                              stringWithFormat:@"%d", operation.inputs[i]]];
+        export_image_node.handle = input_handle;
+        // Create a placeholder for input image, but mps_image_nodes_[inputs[0]]
+        // doesn't need reuse in new graph that does not need to reset.
+        new_image_node = [[MPSNNImageNode alloc] initWithHandle:input_handle];
+      } else {
+        new_image_node = image_nodes[operation.inputs[i]];
+      }
+      [image_array addObject:new_image_node];
     }
   }
 
   MPSNNBinaryArithmeticNode* arithmetic_node = nullptr;
   if (operation.type == mojom::ADD) {
-    Class mpscnn_add_class = NSClassFromString(@"MPSNNAdditionNode");
-    if (!mpscnn_add_class) {
-      DLOG(ERROR) << "Failed to load MPSNNAdditionNode class";
-      return false;
-    }
-    arithmetic_node = [[mpscnn_add_class alloc] initWithSources:image_array];
+    arithmetic_node = [[MPSNNAdditionNode alloc] initWithSources:image_array];
   } else if (operation.type == mojom::MUL) {
-    Class mpscnn_multiply_class = NSClassFromString(@"MPSNNMultiplicationNode");
-    if (!mpscnn_multiply_class) {
-      DLOG(ERROR) << "Failed to load MPSCNNMultiply class";
-      return false;
-    }
     arithmetic_node =
-        [[mpscnn_multiply_class alloc] initWithSources:image_array];
+        [[MPSNNMultiplicationNode alloc] initWithSources:image_array];
   }
   if (!arithmetic_node)
     return false;

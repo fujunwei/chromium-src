@@ -39,8 +39,6 @@ CompilationImplMac::CompilationImplMac(ModelImplMac* model)
   memory_.reset(new int8_t[memory_size_]);
   memcpy(memory_.get(), model->memory_.get(), memory_size_);
   is_bnns_ = true;
-
-  DCHECK(inputs_.size() == 1);
 }
 
 CompilationImplMac::~CompilationImplMac() {
@@ -194,12 +192,13 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
   graphs_.clear();
   mps_image_nodes_.clear();
 
-  // Create a placeholder for input 0 image.
-  MPSNNImageNode* image_node = [[MPSNNImageNode alloc] initWithHandle:nullptr];
-  mps_image_nodes_[inputs_[0]] = image_node;
+  // Create a placeholder for inputs image.
+  for (auto index : inputs_) {
+    mps_image_nodes_[index] = [[MPSNNImageNode alloc] initWithHandle:nullptr];
+  }
 
   bool success = true, new_graph = false;
-  std::vector<uint32_t> graph_outputs;
+  std::vector<uint32_t> graph_outputs, current_graph_inputs;
   for (size_t i = 0; i < operations_.size(); ++i) {
     OperationMac& operation = operations_[i];
     uint32_t type = operation.type;
@@ -215,6 +214,11 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
       operand.read_count += 1;
     }
 
+    // `current_graph_inputs` is use to export image node for inputs of Add
+    // operation isn't in current graph.
+    current_graph_inputs.push_back(inputs[0]);
+    current_graph_inputs.push_back(outputs[0]);
+
     if (new_graph) {
       MPSNNImageNode* export_image_node = mps_image_nodes_[inputs[0]];
       export_image_node.exportFromGraph = true;
@@ -227,6 +231,7 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
           [[MPSNNImageNode alloc] initWithHandle:input_handle];
 
       new_graph = false;
+      current_graph_inputs.clear();
     }
 
     DCHECK(outputs.size() == 1);
@@ -243,10 +248,9 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     } else if (type == mojom::CONCATENATION) {
       success = CompileConcatenation(mps_image_nodes_, operations_, operation,
                                      values_, memory_, operands_);
-      DLOG(ERROR) << "CONCATENATION is not supported";
     } else if (type == mojom::ADD || type == mojom::MUL) {
       success = CompileArithmetic(mps_image_nodes_, operation, constants_,
-                                  values_, memory_);
+                                  values_, memory_, current_graph_inputs);
     } else if (type == mojom::FULLY_CONNECTED) {
       success = CompileFullyConnected(mps_image_nodes_, operation, operands_,
                                       values_, memory_);

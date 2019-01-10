@@ -55,7 +55,8 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                        const OperationMac& operation,
                        std::vector<uint32_t>& constants,
                        const std::map<uint32_t, ValueInfo>& values,
-                       const std::unique_ptr<int8_t[]>& memory);
+                       const std::unique_ptr<int8_t[]>& memory,
+                       std::vector<uint32_t>& current_graph_inputs);
 
 API_AVAILABLE(macosx(10.13))
 bool CompileFullyConnected(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
