@@ -270,7 +270,8 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
       success = CompileBilinearScale(mps_image_nodes_, operation, operands_,
                                      values_, memory_);
     } else {
-      NOTREACHED();
+      DLOG(ERROR) << "Operation is not supported";
+      success = false;
     }
 
     if (!success)

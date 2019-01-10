@@ -603,7 +603,7 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
   const OperandMac& input_operand = operands[operation.inputs[0]];
   if (output_operand.dimensions[2] % input_operand.dimensions[2] != 0 ||
       output_operand.dimensions[1] % input_operand.dimensions[1] != 0) {
-    LOG(ERROR) << "The upsampling factor for the x/y dimension is integer.";
+    LOG(ERROR) << "The upsampling factor for the x/y must be integer.";
     return false;
   }
 
