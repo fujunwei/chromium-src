@@ -41,6 +41,11 @@ class ExecutionImplMacMPS : public mojom::Execution {
                                std::vector<id<MTLBuffer>>&,
                                const std::vector<uint32_t>&);
   void CreateOutputMTLBuffer();
+  API_AVAILABLE(macos(10_13))
+  void EncodeCustomKernel(id<MTLCommandBuffer>& command_buffer,
+                          std::map<uint32_t, MPSImage*>& output_mps_images,
+                          std::map<uint32_t, MPSImage*>& temporary_mps_images,
+                          uint32_t input_index);
 
   void API_AVAILABLE(macos(10_13)) UploadToMPSImage(const MPSImage*,
                                                     const id<MTLBuffer>&,

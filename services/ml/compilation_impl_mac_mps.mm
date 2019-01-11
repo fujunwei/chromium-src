@@ -16,6 +16,37 @@
 namespace ml {
 
 API_AVAILABLE(macosx(10.13))
+MPSNNImageNode* GetMPSImageNode(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                     uint32_t input_index,
+                     const std::vector<uint32_t>& current_graph_inputs) {
+  bool export_image = true;
+  for (size_t j = 0; j < current_graph_inputs.size(); j++) {
+    if (input_index == current_graph_inputs[j]) {
+      export_image = false;
+      break;
+    }
+  }
+
+  MPSNNImageNode* new_image_node = nullptr;
+  if (export_image) {
+    MPSNNImageNode* export_image_node = image_nodes[input_index];
+    TemporaryImageHandle* input_handle = [[TemporaryImageHandle alloc]
+        initWithLabel:[NSString
+                          stringWithFormat:@"%d", input_index]];
+    if (export_image_node) {
+      export_image_node.exportFromGraph = true;
+      export_image_node.handle = input_handle;
+    }
+    // Create a placeholder for input image, but mps_image_nodes_[inputs[0]]
+    // doesn't need reuse in new graph that does not need to reset.
+    new_image_node = [[MPSNNImageNode alloc] initWithHandle:input_handle];
+  } else {
+    new_image_node = image_nodes[input_index];
+  }
+  return new_image_node;
+}
+
+API_AVAILABLE(macosx(10.13))
 MPSCNNNeuron* CreateMPSCNNNeuron(int32_t fuse_code) {
   MPSCNNNeuron* relu = nullptr;
   if (fuse_code == mojom::FUSED_NONE) {
@@ -407,7 +438,8 @@ bool CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                           const OperationMac& concat,
                           const std::map<uint32_t, ValueInfo>& values,
                           const std::unique_ptr<int8_t[]>& memory,
-                          const std::vector<OperandMac>& operands) {
+                          const std::vector<OperandMac>& operands,
+                          const std::vector<uint32_t>& current_graph_inputs) {
   DLOG(INFO) << "CompilationImplMac::CompileConcatenation";
   DLOG_IF(FATAL, concat.type != mojom::CONCATENATION);
 
@@ -434,7 +466,8 @@ bool CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
       return false;
     }
 
-    [image_array addObject:image_nodes[concat_input_idx]];
+    [image_array addObject:GetMPSImageNode(image_nodes, concat_input_idx,
+                                             current_graph_inputs)];
   }
 
   MPSNNConcatenationNode* concat_node =
@@ -451,7 +484,7 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                        std::vector<uint32_t>& constants,
                        const std::map<uint32_t, ValueInfo>& values,
                        const std::unique_ptr<int8_t[]>& memory,
-                       std::vector<uint32_t>& current_graph_inputs) {
+                       const std::vector<uint32_t>& current_graph_inputs) {
   DLOG(INFO) << "CompilationImplMac::CompileArithmetic";
   DLOG_IF(FATAL, operation.type != mojom::ADD && operation.type != mojom::MUL);
 
@@ -467,28 +500,8 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
           [[MPSNNImageNode alloc] initWithHandle:nullptr];
       [image_array addObject:image_node];
     } else {
-      bool export_image = true;
-      for (size_t j = 0; j < current_graph_inputs.size(); j++) {
-        if (operation.inputs[i] == current_graph_inputs[j]) {
-          export_image = false;
-          break;
-        }
-      }
-      MPSNNImageNode* new_image_node = nullptr;
-      if (export_image) {
-        MPSNNImageNode* export_image_node = image_nodes[operation.inputs[i]];
-        export_image_node.exportFromGraph = true;
-        TemporaryImageHandle* input_handle = [[TemporaryImageHandle alloc]
-            initWithLabel:[NSString
-                              stringWithFormat:@"%d", operation.inputs[i]]];
-        export_image_node.handle = input_handle;
-        // Create a placeholder for input image, but mps_image_nodes_[inputs[0]]
-        // doesn't need reuse in new graph that does not need to reset.
-        new_image_node = [[MPSNNImageNode alloc] initWithHandle:input_handle];
-      } else {
-        new_image_node = image_nodes[operation.inputs[i]];
-      }
-      [image_array addObject:new_image_node];
+      [image_array addObject:GetMPSImageNode(image_nodes, operation.inputs[i],
+                                             current_graph_inputs)];
     }
   }
 
@@ -590,10 +603,11 @@ bool CompileFullyConnected(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
 API_AVAILABLE(macosx(10.13))
 bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                           OperationMac& operation,
+                          bool& custom_kernel,
                           const std::vector<OperandMac>& operands,
                           const std::map<uint32_t, ValueInfo>& values,
                           const std::unique_ptr<int8_t[]>& memory) {
-  LOG(ERROR) << "CompileBilinearScale.";
+  DLOG(INFO) << "CompileBilinearScale.";
   const OperandMac& output_operand = operands[operation.outputs[0]];
   if (output_operand.dimensions.size() != 4) {
     LOG(ERROR) << "Input and output must be 4-D tensor.";
@@ -601,25 +615,35 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
   }
 
   const OperandMac& input_operand = operands[operation.inputs[0]];
-  if (output_operand.dimensions[2] % input_operand.dimensions[2] != 0 ||
-      output_operand.dimensions[1] % input_operand.dimensions[1] != 0) {
-    LOG(ERROR) << "The upsampling factor for the x/y must be integer.";
-    return false;
+  if (output_operand.dimensions[2] % input_operand.dimensions[2] == 0 ||
+      output_operand.dimensions[1] % input_operand.dimensions[1] == 0) {
+    // output_operand.dimensions[2] is width for "NHWC" data layout.
+    NSUInteger scale_factorX =
+        output_operand.dimensions[2] / input_operand.dimensions[2];
+    NSUInteger scale_factorY =
+        output_operand.dimensions[1] / input_operand.dimensions[1];
+
+    MPSCNNUpsamplingBilinearNode* bilinear_scale_node =
+        [[MPSCNNUpsamplingBilinearNode alloc]
+                 initWithSource:image_nodes[operation.inputs[0]]
+            integerScaleFactorX:scale_factorX
+            integerScaleFactorY:scale_factorY
+                   alignCorners:true];
+    image_nodes[operation.outputs[0]] = bilinear_scale_node.resultImage;
+  } else {
+    // Generate new graph for input image node.
+    Class resize_bilinear_class = NSClassFromString(@"MPSNNResizeBilinear");
+    if (!resize_bilinear_class) {
+      DLOG(ERROR) << "Failed to load MPSNNResizeBilinear class";
+      return false;
+    }
+    operation.custom_cnn_kernel.reset([[resize_bilinear_class alloc]
+        initWithDevice:GetMPSCNNContext().device
+           resizeWidth:output_operand.dimensions[2]
+          resizeHeight:output_operand.dimensions[1]
+          alignCorners:true]);
+    custom_kernel = true;
   }
-
-  // output_operand.dimensions[2] is width for "NHWC" data layout.
-  NSUInteger scale_factorX =
-      output_operand.dimensions[2] / input_operand.dimensions[2];
-  NSUInteger scale_factorY =
-      output_operand.dimensions[1] / input_operand.dimensions[1];
-
-  MPSCNNUpsamplingBilinearNode* bilinear_scale_node =
-      [[MPSCNNUpsamplingBilinearNode alloc]
-               initWithSource:image_nodes[operation.inputs[0]]
-          integerScaleFactorX:scale_factorX
-          integerScaleFactorY:scale_factorY
-                 alignCorners:true];
-  image_nodes[operation.outputs[0]] = bilinear_scale_node.resultImage;
 
   return true;
 }

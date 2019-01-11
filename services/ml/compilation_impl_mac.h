@@ -49,6 +49,8 @@ class CompilationImplMac : public mojom::Compilation {
   // Used for MPSNNGraph
   std::vector<base::scoped_nsobject<MPSNNGraph>> graphs_;
   std::map<uint32_t, MPSNNImageNode*> mps_image_nodes_;
+  // The first Key is index of input image.
+  std::map<uint32_t, OperationMac> custom_operations_;
 
   base::WeakPtrFactory<CompilationImplMac> compilation_factory_;
 

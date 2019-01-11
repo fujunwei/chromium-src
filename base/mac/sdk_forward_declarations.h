@@ -356,6 +356,16 @@ typedef NSString* VNBarcodeSymbology NS_STRING_ENUM;
            resultImageIsNeeded:(BOOL)resultIsNeeded;
 @end
 
+@interface MPSNNResizeBilinear : NSObject
+@property(readonly, nonatomic) NSUInteger resizeWidth;
+@property(readonly, nonatomic) NSUInteger resizeHeight;
+@property(readonly, nonatomic) BOOL alignCorners;
+- (instancetype)initWithDevice:(id<NSObject>)device
+                   resizeWidth:(NSUInteger)resizeWidth
+                  resizeHeight:(NSUInteger)resizeHeight
+                  alignCorners:(BOOL)alignCorners;
+@end
+
 @interface MPSCNNUpsamplingBilinearNode (HighSierraSDK)
 - (instancetype)initWithSource:(MPSNNImageNode*)sourceNode
            integerScaleFactorX:(NSUInteger)integerScaleFactorX

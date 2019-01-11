@@ -197,7 +197,7 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     mps_image_nodes_[index] = [[MPSNNImageNode alloc] initWithHandle:nullptr];
   }
 
-  bool success = true, new_graph = false;
+  bool success = true, new_graph = false, custom_kernel = false;
   std::vector<uint32_t> graph_outputs, current_graph_inputs;
 #if defined(DEEP_LAB_WORK_AROUND)
   uint32_t image_node_index = 10000;
@@ -220,14 +220,15 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     // `current_graph_inputs` is use to export image node for inputs of Add
     // operation isn't in current graph.
     current_graph_inputs.push_back(inputs[0]);
-    current_graph_inputs.push_back(outputs[0]);
-
     if (new_graph) {
       MPSNNImageNode* export_image_node = mps_image_nodes_[inputs[0]];
-      export_image_node.exportFromGraph = true;
       TemporaryImageHandle* input_handle = [[TemporaryImageHandle alloc]
           initWithLabel:[NSString stringWithFormat:@"%d", inputs[0]]];
-      export_image_node.handle = input_handle;
+      // The export node is null if that is custom kernel.
+      if (export_image_node) {
+        export_image_node.exportFromGraph = true;
+        export_image_node.handle = input_handle;
+      }
       // Create a placeholder for input image, but mps_image_nodes_[inputs[0]]
       // doesn't need reuse in new graph that does not need to reset.
       mps_image_nodes_[inputs[0]] =
@@ -236,6 +237,7 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
       new_graph = false;
       current_graph_inputs.clear();
     }
+    current_graph_inputs.push_back(outputs[0]);
 
     DCHECK(outputs.size() == 1);
     if (type == mojom::CONV_2D ||
@@ -259,7 +261,8 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
       success = CompileReshape(operations_, operation);
     } else if (type == mojom::CONCATENATION) {
       success = CompileConcatenation(mps_image_nodes_, operations_, operation,
-                                     values_, memory_, operands_);
+                                     values_, memory_, operands_,
+                                     current_graph_inputs);
     } else if (type == mojom::ADD || type == mojom::MUL) {
       success = CompileArithmetic(mps_image_nodes_, operation, constants_,
                                   values_, memory_, current_graph_inputs);
@@ -267,8 +270,8 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
       success = CompileFullyConnected(mps_image_nodes_, operation, operands_,
                                       values_, memory_);
     } else if (type == mojom::RESIZE_BILINEAR) {
-      success = CompileBilinearScale(mps_image_nodes_, operation, operands_,
-                                     values_, memory_);
+      success = CompileBilinearScale(mps_image_nodes_, operation, custom_kernel,
+                                     operands_, values_, memory_);
     } else {
       DLOG(ERROR) << "Operation is not supported";
       success = false;
@@ -277,14 +280,35 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     if (!success)
       break;
 
-    for (size_t i = 0; i < outputs_.size(); i++) {
-      if (outputs[0] == outputs_[i]) {
-        new_graph = true;
-        // The order of graph is not the same as outputs_.
-        graph_outputs.push_back(outputs[0]);
-        // Set index of output image.
-        mps_image_nodes_[outputs[0]].handle = [[TemporaryImageHandle alloc]
-            initWithLabel:[NSString stringWithFormat:@"%d", outputs[0]]];
+    if (custom_kernel) {
+      // It's first operation if inputs[0] == inputs_[0] that doesn't need to
+      // splite new graph.
+      if (inputs[0] != inputs_[0]) {
+        MPSNNImageNode* export_image_node = mps_image_nodes_[inputs[0]];
+        // And the outputImageNode of first need to be export as temporary
+        // image.
+        export_image_node.exportFromGraph = true;
+        export_image_node.handle = [[TemporaryImageHandle alloc]
+            initWithLabel:[NSString stringWithFormat:@"%d", inputs[0]]];
+        // The custom kernel splite graphs into 2 graphs (first, second).
+        // The first graph outputImageNode is the inputs[0] of current
+        // operation.
+        graph_outputs.push_back(inputs[0]);
+      }
+
+      custom_operations_[operation.inputs[0]] = operation;
+      custom_kernel = false;
+      new_graph = true;
+    } else {
+      for (size_t i = 0; i < outputs_.size(); i++) {
+        if (outputs[0] == outputs_[i]) {
+          new_graph = true;
+          // The order of graph is not the same as outputs_.
+          graph_outputs.push_back(outputs[0]);
+          // Set index of output image.
+          mps_image_nodes_[outputs[0]].handle = [[TemporaryImageHandle alloc]
+              initWithLabel:[NSString stringWithFormat:@"%d", outputs[0]]];
+        }
       }
     }
   }
