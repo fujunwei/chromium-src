@@ -64,10 +64,16 @@ const int32 PREFER_SUSTAINED_SPEED = 2;
 
 // Result code.
 const int32 NOT_ERROR = 0;
-const int32 OUT_OF_MEMORY = 1;
-const int32 INCOMPLETE = 2;
-const int32 UNEXPECTED_NULL = 3;
-const int32 BAD_DATA = 4;
-const int32 OP_FAILED = 5;
-const int32 UNMAPPABLE = 5;
-const int32 BAD_STATE = 6;
+const int32 BAD_DATA = 1;
+const int32 OP_FAILED = 2;
+const int32 BAD_STATE = 3;
+const int32 UNSUPPORTED_PLATFORM = 4;
+const int32 UNSUPPORTED_PREFERENCE = 5;
+const int32 UNSUPPORTED_OPERATION = 6;
+const int32 UNSUPPORTED_FUSE_CODE = 7;
+const int32 UNSUPPORTED_BETA = 8;
+const int32 UNSUPPORTED_AXIS = 9;
+const int32 DEPTHWISE_MULTIPLIER = 10;
+const int32 DIFFERENT_BATCH_SIZE = 11;
+const int32 INTEGER_RESIZE_BILINEAR = 12;
+const int32 INVALID_CONTEXT = 13;

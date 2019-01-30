@@ -110,7 +110,7 @@ void ComputeMPSOffsetForImplictPadding(bool same_padding,
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileConv2DOrDepthwiseConv2D(
+int CompileConv2DOrDepthwiseConv2D(
     std::map<uint32_t, MPSNNImageNode*>& image_nodes,
     const OperationMac& operation,
     const std::map<uint32_t, ValueInfo>& values,
@@ -139,7 +139,7 @@ bool CompileConv2DOrDepthwiseConv2D(
           padding_top, padding_bottom, stride_width, stride_height,
           padding_code, fuse_code, depth_out, filter_height, filter_width,
           depth_in, depthwise_multiplier, depthwise))
-    return false;
+    return mojom::BAD_DATA;
 
   // TODO(junwei.fu):Use ConvParams to refactor code.
   uint32_t dilation_x = 1, dilation_y = 1;
@@ -161,14 +161,9 @@ bool CompileConv2DOrDepthwiseConv2D(
 
   MPSNNImageNode* input_image = image_nodes[inputs[0]];
   if (depthwise) {
-    if (depth_out != depth_in * depthwise_multiplier) {
-      DLOG(ERROR)
-          << "Failed assertion: outputFeatureChannels " << depth_out
-          << " in MPS depthwise convolution descriptor must be multiplie of "
-             "inFeatureChannels "
-          << depth_in;
-      return false;
-    }
+    if (depth_out != depth_in * depthwise_multiplier)
+      return mojom::DEPTHWISE_MULTIPLIER;
+
     // Convert from WebML weights shape [1, filter_height, filter_width,
     // depth_out] to MPSCNNConvlution weight[ outputChannels ][ kernelHeight
     // ][ kernelWidth ][ inputChannels / groups ]
@@ -205,13 +200,11 @@ bool CompileConv2DOrDepthwiseConv2D(
     offset.y = (int)(filter_height / 2) - padding_top;
     offset.z = 0;
   }
-  DLOG(INFO) << "    offset MPSOffset(x: " << offset.x << " y: " << offset.y
-             << ")";
 
   uint32_t n, width, height, channels;
   // operands[outputs[0]] is output operand.
   if (!GetMPSImageInfo(operands[outputs[0]], n, width, height, channels))
-    return false;
+    return mojom::BAD_DATA;
   [conv_node setPaddingPolicy:[[CustomPadding alloc]
                                   initWithOffset:offset
                                         edgeMode:MPSImageEdgeModeZero
@@ -221,15 +214,15 @@ bool CompileConv2DOrDepthwiseConv2D(
                                         channels:channels]];
   image_nodes[outputs[0]] = conv_node.resultImage;
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
-                               const OperationMac& operation,
-                               const std::map<uint32_t, ValueInfo>& values,
-                               const std::unique_ptr<int8_t[]>& memory,
-                               const std::vector<OperandMac>& operands) {
+int CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                              const OperationMac& operation,
+                              const std::map<uint32_t, ValueInfo>& values,
+                              const std::unique_ptr<int8_t[]>& memory,
+                              const std::vector<OperandMac>& operands) {
   DLOG(INFO) << "CompilationImplMac::CompileAverageOrMaxPool2D";
   DLOG_IF(FATAL, operation.type != mojom::AVERAGE_POOL_2D &&
                      operation.type != mojom::MAX_POOL_2D);
@@ -264,7 +257,7 @@ bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
     padding_code = getScalarInt32(values, inputs[i++], memory.get());
   } else {
     DLOG(ERROR) << "  inputs size is incorrect";
-    return false;
+    return mojom::BAD_DATA;
   }
   const int32_t stride_width =
       getScalarInt32(values, inputs[i++], memory.get());
@@ -291,10 +284,8 @@ bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
   DLOG(INFO) << "  filter_width: " << filter_width;
   DLOG(INFO) << "  fuse_code: " << fuse_code;
 
-  if (fuse_code != mojom::FUSED_NONE) {
-    DLOG(ERROR) << "  fuse_code " << fuse_code << " is not supproted.";
-    return false;
-  }
+  if (fuse_code != mojom::FUSED_NONE)
+    return mojom::UNSUPPORTED_FUSE_CODE;
 
   MPSCNNPoolingNode* pool_node;
   MPSNNImageNode* input_image = image_nodes[inputs[0]];
@@ -311,8 +302,7 @@ bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                                              strideInPixelsX:stride_width
                                              strideInPixelsY:stride_height];
   } else {
-    DLOG(ERROR) << "Operation " << operation.type << " is not supported";
-    return false;
+    return mojom::UNSUPPORTED_OPERATION;
   }
   MPSOffset offset;
   if (implicit_padding) {
@@ -329,7 +319,7 @@ bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
 
   uint32_t n, width, height, channels;
   if (!GetMPSImageInfo(output, n, width, height, channels))
-    return false;
+    return mojom::BAD_DATA;
   [pool_node setPaddingPolicy:[[CustomPadding alloc]
                                   initWithOffset:offset
                                         edgeMode:MPSImageEdgeModeClamp
@@ -339,32 +329,30 @@ bool CompileAverageOrMaxPool2D(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
                                         channels:channels]];
   image_nodes[outputs[0]] = pool_node.resultImage;
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileSoftmax(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
-                    const OperationMac& operation,
-                    const std::map<uint32_t, ValueInfo>& values,
-                    const std::unique_ptr<int8_t[]>& memory) {
+int CompileSoftmax(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                   const OperationMac& operation,
+                   const std::map<uint32_t, ValueInfo>& values,
+                   const std::unique_ptr<int8_t[]>& memory) {
   DLOG(INFO) << "CompilationImplMac::CompileSoftmax";
   DLOG_IF(FATAL, operation.type != mojom::SOFTMAX);
   float beta = getScalarFloat(values, operation.inputs[1], memory.get());
   DLOG(INFO) << "  beta: " << beta;
-  if (beta != 1.0) {
-    DLOG(ERROR) << "  beta " << beta << " is not supported.";
-    return false;
-  }
+  if (beta != 1.0)
+    return mojom::UNSUPPORTED_BETA;
 
   MPSCNNSoftMaxNode* softmax_node = [[MPSCNNSoftMaxNode alloc]
       initWithSource:image_nodes[operation.inputs[0]]];
   image_nodes[operation.outputs[0]] = softmax_node.resultImage;
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
-bool CompileReshape(std::vector<OperationMac>& operations,
-                    const OperationMac& reshape) {
+int CompileReshape(std::vector<OperationMac>& operations,
+                   const OperationMac& reshape) {
   DLOG(INFO) << "CompilationImplMac::CompileReshape";
   DLOG_IF(FATAL, reshape.type != mojom::RESHAPE);
 
@@ -381,16 +369,16 @@ bool CompileReshape(std::vector<OperationMac>& operations,
     }
   }
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
-                          std::vector<OperationMac>& operations,
-                          const OperationMac& concat,
-                          const std::map<uint32_t, ValueInfo>& values,
-                          const std::unique_ptr<int8_t[]>& memory,
-                          const std::vector<OperandMac>& operands) {
+int CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                         std::vector<OperationMac>& operations,
+                         const OperationMac& concat,
+                         const std::map<uint32_t, ValueInfo>& values,
+                         const std::unique_ptr<int8_t[]>& memory,
+                         const std::vector<OperandMac>& operands) {
   DLOG(INFO) << "CompilationImplMac::CompileConcatenation";
   DLOG_IF(FATAL, concat.type != mojom::CONCATENATION);
 
@@ -400,11 +388,8 @@ bool CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
   uint32_t axis =
       getScalarInt32(values, inputs[inputs.size() - 1], memory.get());
   DLOG(INFO) << "axis: " << axis;
-
-  if (axis != 3) {
-    DLOG(ERROR) << "Only axis == 3 is supported";
-    return false;
-  }
+  if (axis != 3)
+    return mojom::UNSUPPORTED_AXIS;
 
   NSMutableArray<MPSNNImageNode*>* image_array =
       [NSMutableArray arrayWithCapacity:1];
@@ -414,7 +399,7 @@ bool CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
     if (operand.dimensions.size() < 4) {
       DLOG(ERROR) << "Invalid dimensions of operand " << concat_input_idx
                   << " length is " << operand.dimensions.size();
-      return false;
+      return mojom::BAD_DATA;
     }
 
     [image_array addObject:image_nodes[concat_input_idx]];
@@ -425,16 +410,16 @@ bool CompileConcatenation(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
   // concat.outputs[0] is index of output.
   image_nodes[concat.outputs[0]] = concat_node.resultImage;
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
-                       const OperationMac& operation,
-                       const std::vector<OperandMac>& operands,
-                       std::vector<uint32_t>& constants,
-                       const std::map<uint32_t, ValueInfo>& values,
-                       const std::unique_ptr<int8_t[]>& memory) {
+int CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                      const OperationMac& operation,
+                      const std::vector<OperandMac>& operands,
+                      std::vector<uint32_t>& constants,
+                      const std::map<uint32_t, ValueInfo>& values,
+                      const std::unique_ptr<int8_t[]>& memory) {
   DLOG(INFO) << "CompilationImplMac::CompileArithmetic";
   const std::vector<uint32_t>& primary_dimension =
       operands[operation.inputs[0]].dimensions;
@@ -444,10 +429,8 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
       primary_dimension.size() == 4 ? primary_dimension[0] : 1;
   size_t secondary_batch_size =
       secondary_dimension.size() == 4 ? secondary_dimension[0] : 1;
-  if (primary_batch_size != secondary_batch_size) {
-    LOG(ERROR) << "Different batch size for arithmetic isn't supported.";
-    return false;
-  }
+  if (primary_batch_size != secondary_batch_size)
+    return mojom::DIFFERENT_BATCH_SIZE;
 
   // Check constants for input 0 and 1
   NSMutableArray<MPSNNImageNode*>* image_array =
@@ -509,20 +492,20 @@ bool CompileArithmetic(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
   image_nodes[operation.outputs[0]] =
       relu_node ? relu_node.resultImage : arithmetic_node.resultImage;
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileFullyConnected(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
-                           OperationMac& operation,
-                           std::vector<OperandMac>& operands,
-                           const std::map<uint32_t, ValueInfo>& values,
-                           const std::unique_ptr<int8_t[]>& memory) {
+int CompileFullyConnected(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                          OperationMac& operation,
+                          std::vector<OperandMac>& operands,
+                          const std::map<uint32_t, ValueInfo>& values,
+                          const std::unique_ptr<int8_t[]>& memory) {
   // operation.inputs[0] is the index of input in operands_.
   OperandMac& input = operands[operation.inputs[0]];
   if (input.dimensions.size() < 2) {
     DLOG(ERROR) << "A tenosr of least rank 2.";
-    return false;
+    return mojom::BAD_DATA;
   }
 
   // If rank is greater than 2, then it gets flattened to a 2-D Tensor.
@@ -556,15 +539,16 @@ bool CompileFullyConnected(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
       source_weights, source_bias, relu, operation.type);
 
   image_nodes[operation.outputs[0]] = fully_connected_node.resultImage;
-  return true;
+
+  return mojom::NOT_ERROR;
 }
 
 API_AVAILABLE(macosx(10.13))
-bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
-                          OperationMac& operation,
-                          const std::vector<OperandMac>& operands,
-                          const std::map<uint32_t, ValueInfo>& values,
-                          const std::unique_ptr<int8_t[]>& memory) {
+int CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
+                         OperationMac& operation,
+                         const std::vector<OperandMac>& operands,
+                         const std::map<uint32_t, ValueInfo>& values,
+                         const std::unique_ptr<int8_t[]>& memory) {
   DLOG(INFO) << "Compile resize bilinear operation.";
   bool align_corners = false;
   switch (operation.inputs.size()) {
@@ -577,20 +561,19 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
       break;
     default:
       LOG(ERROR) << "Inputs size is wrong " << operation.inputs.size();
-      return false;
+      return mojom::BAD_DATA;
   }
 
   const OperandMac& output_operand = operands[operation.outputs[0]];
   if (output_operand.dimensions.size() != 4) {
     LOG(ERROR) << "Input and output must be 4-D tensor.";
-    return false;
+    return mojom::BAD_DATA;
   }
 
   const OperandMac& input_operand = operands[operation.inputs[0]];
   if (output_operand.dimensions[2] % input_operand.dimensions[2] != 0 ||
       output_operand.dimensions[1] % input_operand.dimensions[1] != 0) {
-    LOG(ERROR) << "The upsampling factor for the x/y must be integer.";
-    return false;
+    return mojom::INTEGER_RESIZE_BILINEAR;
   }
 
   // output_operand.dimensions[2] is width for "NHWC" data layout.
@@ -607,7 +590,7 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
         integerScaleFactorY:scale_factorY
                alignCorners:align_corners];
     image_nodes[operation.outputs[0]] = bilinear_scale_node.resultImage;
-    return true;
+    return mojom::NOT_ERROR;
   }
 
   if (@available(macOS 10.13, *)) {
@@ -619,7 +602,7 @@ bool CompileBilinearScale(std::map<uint32_t, MPSNNImageNode*>& image_nodes,
     image_nodes[operation.outputs[0]] = bilinear_scale_node.resultImage;
   }
 
-  return true;
+  return mojom::NOT_ERROR;
 }
 
 }  // namespace ml

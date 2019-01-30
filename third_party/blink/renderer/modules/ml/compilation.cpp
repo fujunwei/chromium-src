@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/ml/execution.h"
+#include "third_party/blink/renderer/modules/ml/ml_error.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -96,9 +97,7 @@ void Compilation::OnResultCode(ScriptPromiseResolver* resolver,
   if (result_code == ml::mojom::blink::NOT_ERROR) {
     resolver->Resolve(result_code);
   } else {
-    resolver->Reject(DOMException::Create(
-        DOMExceptionCode::kInvalidStateError,
-        operation_name + "fails: " + String::Number(result_code)));
+    resolver->Reject(ml_error::CreateException(result_code, operation_name));
   }
 }
 

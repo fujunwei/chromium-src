@@ -12,6 +12,8 @@ blink_modules_sources("ml") {
     "execution.h",
     "ml.cpp",
     "ml.h",
+    "ml_error.cc",
+    "ml_error.h",
     "model.cpp",
     "model.h",
     "navigator_ml.cpp",

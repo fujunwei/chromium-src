@@ -66,7 +66,7 @@ void CompilationImplMac::Finish(int32_t preference, FinishCallback callback) {
       CompileModelWithMPS(std::move(callback));
     }
   } else {
-    std::move(callback).Run(mojom::BAD_STATE);
+    std::move(callback).Run(mojom::UNSUPPORTED_PLATFORM);
   }
 }
 
@@ -181,7 +181,7 @@ void CompilationImplMac::CompileModelWithBNNS(FinishCallback callback) {
 API_AVAILABLE(macosx(10.13))
 void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
   if (!GetMPSCNNContext().IsValid()) {
-    std::move(callback).Run(mojom::BAD_STATE);
+    std::move(callback).Run(mojom::INVALID_CONTEXT);
     return;
   }
 
@@ -194,7 +194,8 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     mps_image_nodes_[index] = [[MPSNNImageNode alloc] initWithHandle:nullptr];
   }
 
-  bool success = true, new_graph = false;
+  int error_code;
+  bool new_graph = false;
   std::vector<uint32_t> graph_outputs;
   for (size_t i = 0; i < operations_.size(); ++i) {
     OperationMac& operation = operations_[i];
@@ -230,34 +231,33 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
         type == mojom::DEPTHWISE_CONV_2D ||
         type == mojom::ATROUS_CONV_2D ||
         type == mojom::ATROUS_DEPTHWISE_CONV_2D) {
-      success = CompileConv2DOrDepthwiseConv2D(mps_image_nodes_, operation,
-                                               values_, memory_, operands_);
+      error_code = CompileConv2DOrDepthwiseConv2D(mps_image_nodes_, operation,
+                                                  values_, memory_, operands_);
     } else if (type == mojom::AVERAGE_POOL_2D || type == mojom::MAX_POOL_2D) {
-      success = CompileAverageOrMaxPool2D(mps_image_nodes_, operation, values_,
-                                          memory_, operands_);
+      error_code = CompileAverageOrMaxPool2D(mps_image_nodes_, operation,
+                                             values_, memory_, operands_);
     } else if (type == mojom::SOFTMAX) {
-      success = CompileSoftmax(mps_image_nodes_, operation, values_, memory_);
+      error_code =
+          CompileSoftmax(mps_image_nodes_, operation, values_, memory_);
     } else if (type == mojom::RESHAPE) {
-      success = CompileReshape(operations_, operation);
+      error_code = CompileReshape(operations_, operation);
     } else if (type == mojom::CONCATENATION) {
-      success = CompileConcatenation(mps_image_nodes_, operations_, operation,
-                                     values_, memory_, operands_);
-      DLOG(ERROR) << "CONCATENATION is not supported";
+      error_code = CompileConcatenation(mps_image_nodes_, operations_,
+                                        operation, values_, memory_, operands_);
     } else if (type == mojom::ADD || type == mojom::MUL) {
-      success = CompileArithmetic(mps_image_nodes_, operation, operands_,
-                                  constants_, values_, memory_);
+      error_code = CompileArithmetic(mps_image_nodes_, operation, operands_,
+                                     constants_, values_, memory_);
     } else if (type == mojom::FULLY_CONNECTED) {
-      success = CompileFullyConnected(mps_image_nodes_, operation, operands_,
-                                      values_, memory_);
+      error_code = CompileFullyConnected(mps_image_nodes_, operation, operands_,
+                                         values_, memory_);
     } else if (type == mojom::RESIZE_BILINEAR) {
-      success = CompileBilinearScale(mps_image_nodes_, operation, operands_,
-                                     values_, memory_);
+      error_code = CompileBilinearScale(mps_image_nodes_, operation, operands_,
+                                        values_, memory_);
     } else {
-      LOG(ERROR) << "Operation is not supported";
-      success = false;
+      error_code = mojom::UNSUPPORTED_OPERATION;
     }
 
-    if (!success)
+    if (error_code != mojom::NOT_ERROR)
       break;
 
     for (size_t i = 0; i < outputs_.size(); i++) {
@@ -272,7 +272,7 @@ void CompilationImplMac::CompileModelWithMPS(FinishCallback callback) {
     }
   }
 
-  if (success) {
+  if (error_code == mojom::NOT_ERROR) {
     // The output image need to return result with MPSImage.
     for (size_t i = 0; i < graph_outputs.size(); i++) {
       // OutputImageAllocator* image_allocator = [[OutputImageAllocator alloc]

@@ -52,8 +52,7 @@ void CompilationImpl::Finish(int32_t preference, FinishCallback callback) {
   } else if (preference == mojom::PREFER_FAST_SINGLE_ANSWER) {
     delegate_ = std::make_unique<CompilationDelegateMklDnn>(this);
   } else {
-    LOG(ERROR) << "Preference: " << preference << " is not suppoted.";
-    std::move(callback).Run(mojom::BAD_DATA);
+    std::move(callback).Run(mojom::UNSUPPORTED_PREFERENCE);
     return;
   }
   int32_t result = delegate_->Compile();
