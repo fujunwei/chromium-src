@@ -120,6 +120,11 @@ bool ExecutionImplMacBNNS::PrepareBnnsOperandsMemory() {
   return true;
 }
 
+void ExecutionImplMacBNNS::SetGpuMemoryBufferHandle(
+    uint32 index, gfx::GpuMemoryBufferHandle handle) {
+  NOTREACHED();
+}
+
 void ExecutionImplMacBNNS::StartCompute(StartComputeCallback callback) {
   DLOG(INFO) << "ExecutionImplMacBNNS::StartCompute";
   bool success = true;

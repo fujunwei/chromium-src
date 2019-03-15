@@ -14,6 +14,8 @@
 #include "services/ml/mpscnn_context.h"
 #include "services/ml/public/mojom/constants.mojom.h"
 
+#include "services/ml/opengl_metal_mac/shared_metal.h"
+
 namespace ml {
 
 namespace {
@@ -158,10 +160,48 @@ void ExecutionImplMacMPS::CreateOutputMTLBuffer() {
   }
 }
 
+void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
+    uint32 index,
+    gfx::GpuMemoryBufferHandle buffer_handle) {
+  LOG(ERROR) << "=====ExecutionImplMacMPS::SetGpuMemoryBufferHandle.";
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
+      IOSurfaceLookupFromMachPort(buffer_handle.mach_port.get()));
+  if (!io_surface) {
+    LOG(ERROR) << "Failed to open IOSurface via mach port.";
+  }
+
+  base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
+  CVPixelBufferCreateWithIOSurface(nullptr, io_surface, nullptr,
+                                   cv_pixel_buffer.InitializeInto());
+
+  CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+  const __fp16* src =
+      static_cast<__fp16*>(CVPixelBufferGetBaseAddress(cv_pixel_buffer));
+  // const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(cv_pixel_buffer);
+  const size_t cv_height = CVPixelBufferGetHeight(cv_pixel_buffer);
+  const size_t cv_width = CVPixelBufferGetWidth(cv_pixel_buffer);
+  // const OperandMac& operand = compilation_->operands_[index];
+  // uint32_t n, width, height, channels;
+  // if (!ml::GetMPSImageInfo(operand, n, width, height, channels)) {
+  //   LOG(ERROR) << "=====Fail to get MPSImage Info.";
+  //   return;
+  // }
+  LOG(ERROR) << "======operand width = " << cv_width << " " << cv_height
+             << " format = "
+             << CVPixelBufferGetPixelFormatType(cv_pixel_buffer);
+  for (size_t i = 0; i < cv_width * cv_height * 4; i++) {
+    LOG(ERROR) << "======the data = " << src[i];
+  }
+
+  CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+}
+
 void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
   DLOG(INFO) << "ExecutionImplMac::StartCompute";
   bool success = true;
   if (@available(macOS 10.13, *)) {
+    // SharedMetal* test = [[SharedMetal alloc]
+    // initWithTextureSize:CGSizeMake(10, 10)]; [test testSharedMetal];
     do {
       @autoreleasepool {
         id<MTLCommandBuffer> command_buffer =

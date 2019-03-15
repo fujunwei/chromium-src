@@ -4,7 +4,11 @@
 
 module ml.mojom;
 
+import "ui/gfx/mojo/buffer_types.mojom";
+
 interface Execution {
+  SetGpuMemoryBufferHandle(uint32 index, gfx.mojom.GpuMemoryBufferHandle buffer_handle);
+
   StartCompute()
     => (int32 resultCode);
 };

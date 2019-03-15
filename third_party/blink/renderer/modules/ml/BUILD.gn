@@ -18,6 +18,10 @@ blink_modules_sources("ml") {
     "navigator_ml.h",
     "neural_network_context.cpp",
     "neural_network_context.h",
+    "opengl_renderer.h",
+    "opengl_renderer.cpp",
+    "vertex_shader.h",
+    "fragment_shader.h"
   ]
 
   public_deps = [
