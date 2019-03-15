@@ -12,4 +12,8 @@ mojom("mojom") {
     "model.mojom",
     "neuralnetwork.mojom",
   ]
+
+  public_deps = [
+    "//ui/gfx/mojo",
+  ]
 }

@@ -31,6 +31,8 @@ class ExecutionImplMacMPS : public mojom::Execution {
                       mojo::ScopedSharedBufferHandle);
   ~ExecutionImplMacMPS() override;
 
+  void SetGpuMemoryBufferHandle(
+      gfx::GpuMemoryBufferHandle buffer_handle) override;
   void StartCompute(StartComputeCallback callback) override;
 
   bool IsValid() const;

@@ -158,6 +158,19 @@ void ExecutionImplMacMPS::CreateOutputMTLBuffer() {
   }
 }
 
+void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
+    gfx::GpuMemoryBufferHandle buffer_handle) {
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
+      IOSurfaceLookupFromMachPort(buffer_handle.mach_port.get()));
+  if (!io_surface) {
+    LOG(ERROR) << "Failed to open IOSurface via mach port.";
+  }
+
+  base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
+  CVPixelBufferCreateWithIOSurface(nullptr, io_surface, nullptr,
+                                   cv_pixel_buffer.InitializeInto());
+}
+
 void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
   DLOG(INFO) << "ExecutionImplMac::StartCompute";
   bool success = true;

@@ -4,13 +4,24 @@
 
 #include "third_party/blink/renderer/modules/ml/execution.h"
 
+#import <OpenGL/gl3.h>
+
+#include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/gles2_lib.h"
+#include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "services/ml/public/mojom/constants.mojom-blink.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
+#include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "ui/gfx/mojo/buffer_types.mojom-blink.h"
 
 namespace blink {
 
@@ -96,6 +107,86 @@ void Execution::setInput(uint32_t index,
 
   memcpy(static_cast<void*>(info->mapping.get()), data.View()->BaseAddress(),
          length);
+}
+
+void Execution::setInput(uint32_t index,
+                         WebGLRenderingContext* context,
+                         WebGLTexture* texture,
+                         ExceptionState& exception_state) {
+  if (index >= inputs_.size()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Invalid index");
+    return;
+  }
+
+  std::unique_ptr<OperandInfo>& info = inputs_.at(index);
+  // 32 is the length of GLuint type, see "typedef unsigned int GLuint".
+  if (info->length < 32) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Invalid data");
+    return;
+  }
+
+  DrawingBuffer* drawing_buffer = context->GetDrawingBuffer();
+  gpu::gles2::GLES2Interface* gl = drawing_buffer->ContextGL();
+  WebGraphicsContext3DProvider* context_provider =
+      drawing_buffer->ContextProvider();
+
+  gpu::SharedImageInterface* sii = context_provider->SharedImageInterface();
+  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
+      Platform::Current()->GetGpuMemoryBufferManager();
+
+  gpu::Mailbox mailbox;
+  GLuint texture_id = 0;
+  std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
+  IntSize size(100, 100);  // Only for testing
+  gpu_memory_buffer = gpu_memory_buffer_manager->CreateGpuMemoryBuffer(
+      gfx::Size(size), gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::SCANOUT,
+      gpu::kNullSurfaceHandle);
+  if (!gpu_memory_buffer)
+    return;
+
+  mailbox = sii->CreateSharedImage(
+      gpu_memory_buffer.get(), gpu_memory_buffer_manager,
+      context->ColorParams().GetStorageGfxColorSpace(),
+      gpu::SHARED_IMAGE_USAGE_GLES2 |
+          gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+          gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT);
+
+  // Import the allocated SharedImage into GL.
+  gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
+  gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+  texture_id = gl->CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name);
+  gl->BindTexture(GL_TEXTURE_RECTANGLE, texture_id);
+  gl->BeginSharedImageAccessDirectCHROMIUM(
+      texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
+
+  // Testing.
+  if (false) {
+    GLuint fbo = 0;
+    gl->GenFramebuffers(1, &fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
+    gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                             GL_TEXTURE_RECTANGLE, texture_id, 0);
+    gl->ClearColor(0, 1, 0, 1);
+    gl->Clear(GL_COLOR_BUFFER_BIT);
+    gl->Flush();
+
+    uint32_t result;
+    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
+    // The expected result is 4278255360.
+  }
+
+  gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
+  auto buffer_handle = gfx::mojom::blink::GpuMemoryBufferHandle::New();
+  buffer_handle->id = gfx::mojom::blink::GpuMemoryBufferId::New(handle.id.id);
+  buffer_handle->offset = handle.offset;
+  buffer_handle->stride = handle.stride;
+  buffer_handle->platform_handle =
+      gfx::mojom::blink::GpuMemoryBufferPlatformHandle::NewMachPort(
+          mojo::WrapMachPort(handle.mach_port.get()));
+
+  execution_->SetGpuMemoryBufferHandle(std::move(buffer_handle));
 }
 
 void Execution::setOutput(uint32_t index,
