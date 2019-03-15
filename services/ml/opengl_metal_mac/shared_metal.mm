@@ -84,6 +84,7 @@
 - (void)drawOpenGLTexture:(GLenum)texTarget texName:(GLuint)texName {
   [_openGLContext makeCurrentContext];
 
+  glBindTexture(texTarget, texName);
   // Execute OpenGL renderer draw routine to build.
   [_openGLRenderer draw:_frameBufferObject texTarget:texTarget texName:texName];
 
