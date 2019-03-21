@@ -68,6 +68,7 @@
 #include "services/media_session/public/mojom/constants.mojom.h"
 #include "services/metrics/metrics_mojo_service.h"
 #include "services/metrics/public/mojom/constants.mojom.h"
+#include "services/ml/public/mojom/constants.mojom.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cross_thread_shared_url_loader_factory_info.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
@@ -111,7 +112,7 @@ base::LazyInstance<std::map<std::string, base::WeakPtr<UtilityProcessHost>>>::
 // On ChromeOS the network service has to run on the IO thread because
 // ProfileIOData and NetworkContext both try to set up NSS, which has has to be
 // called from the IO thread.
-const base::Feature kNetworkServiceDedicatedThread{
+const base::Feature kNetworkServiceDedicatedThread {
   "NetworkServiceDedicatedThread",
 #if defined(OS_CHROMEOS)
       base::FEATURE_DISABLED_BY_DEFAULT
