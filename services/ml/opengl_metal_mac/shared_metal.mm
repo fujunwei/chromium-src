@@ -112,6 +112,7 @@
       newTextureViewWithPixelFormat:MTLPixelFormatBGRA8Unorm];
   MPSImage* image =
       [[MPSImage alloc] initWithTexture:new_texture featureChannels:3];
+
   DLOG(INFO) << image.width;
 }
 
