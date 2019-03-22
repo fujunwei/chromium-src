@@ -5,6 +5,7 @@
 #include "services/ml/execution_impl_mac_mps.h"
 
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
+#import <OpenGL/gl3.h>
 
 #include "base/logging.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -13,10 +14,13 @@
 #include "services/ml/mps_protocols_impl.h"
 #include "services/ml/mpscnn_context.h"
 #include "services/ml/public/mojom/constants.mojom.h"
+#include "services/ml/opengl_metal_mac/shared_metal.h"
 
 namespace ml {
 
 namespace {
+
+const char kTextureName[] = "textureName=";
 
 NSString* API_AVAILABLE(macosx(10.13)) KernelFor(const MPSImage* X,
                                                  NSString* arrayKernel,
@@ -169,12 +173,29 @@ void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
 
         NSMutableArray<MPSImage*>* image_array =
             [NSMutableArray arrayWithCapacity:1];
+        MPSImage* mps_img;
         for (size_t i = 0; i < compilation_->inputs_.size(); ++i) {
           std::unique_ptr<OperandInfo>& input_data = inputs_info_[i];
-          MPSImage* mps_img = input_mpsimages_[i].get();
-          const id<MTLBuffer> mtl_buffer = input_mtlbuffers_[i];
-          UploadToMPSImage(mps_img, mtl_buffer, command_buffer,
-                           input_data->mapping.get(), input_data->length);
+          if (std::string(static_cast<char*>(input_data->mapping.get()), strlen(kTextureName)) == kTextureName) {
+            const char* name = static_cast<char*>(input_data->mapping.get());
+            GLuint* texture_name = (GLuint*)(name + strlen(kTextureName) + 1);
+            SharedMetal* shared_metal = [[SharedMetal alloc] initWithTextureSize:CGSizeMake(100, 100)];
+            // [shared_metal.interopTexture.openGLContext makeCurrentContext];
+            // glBindTexture(GL_TEXTURE_RECTANGLE, *texture_name);
+            [shared_metal drawOpenGLTexture:GL_TEXTURE_2D
+              texName:*texture_name];//GL_TEXTURE_2D. GL_TEXTURE_RECTANGLE
+            id<MTLTexture> new_texture = [shared_metal.interopTexture.metalTexture
+                newTextureViewWithPixelFormat:MTLPixelFormatBGRA8Unorm];
+
+            mps_img =
+                [[MPSImage alloc] initWithTexture:new_texture featureChannels:3];
+            DLOG(INFO) << mps_img.width;
+          } else {
+            mps_img = input_mpsimages_[i].get();
+            const id<MTLBuffer> mtl_buffer = input_mtlbuffers_[i];
+            UploadToMPSImage(mps_img, mtl_buffer, command_buffer,
+                             input_data->mapping.get(), input_data->length);
+          }
           [image_array addObject:mps_img];
         }
 

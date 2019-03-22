@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_texture.h"
 
 namespace blink {
 
@@ -41,6 +42,7 @@ class Execution final : public ScriptWrappable {
   ~Execution() override;
 
   void setInput(uint32_t, MaybeShared<DOMArrayBufferView>, ExceptionState&);
+  void setInput(uint32_t, WebGLTexture*, ExceptionState&);
   void setOutput(uint32_t, MaybeShared<DOMArrayBufferView>, ExceptionState&);
   ScriptPromise startCompute(ScriptState*);
 

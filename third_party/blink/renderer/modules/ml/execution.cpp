@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/modules/ml/execution.h"
 
+#import <OpenGL/gl3.h>
+
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "services/ml/public/mojom/constants.mojom-blink.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -15,6 +17,8 @@
 namespace blink {
 
 namespace {
+
+const char kTextureName[] = "textureName=";
 
 uint32_t product(const WTF::Vector<uint32_t>& dims) {
   uint32_t prod = 1;
@@ -96,6 +100,30 @@ void Execution::setInput(uint32_t index,
 
   memcpy(static_cast<void*>(info->mapping.get()), data.View()->BaseAddress(),
          length);
+  LOG(ERROR) << "==========in blink execution buffer length = " << length;
+}
+
+void Execution::setInput(uint32_t index,
+                         WebGLTexture* texture,
+                         ExceptionState& exception_state) {
+  if (index >= inputs_.size()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Invalid index");
+    return;
+  }
+
+  std::unique_ptr<OperandInfo>& info = inputs_.at(index);
+  // 32 is the length of GLuint type, see "typedef unsigned int GLuint".
+  if (info->length < 32) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Invalid data");
+    return;
+  }
+  memcpy(static_cast<void*>(info->mapping.get()), kTextureName, strlen(kTextureName) + 1);
+  const char* name = static_cast<char*>(info->mapping.get());
+  GLuint* texture_name = (GLuint*)(name + strlen(kTextureName) + 1);
+  *texture_name = ObjectOrZero(texture);
+  LOG(ERROR) << "==========in blink execution texture_name = " << *texture_name;
 }
 
 void Execution::setOutput(uint32_t index,
