@@ -16,7 +16,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
-#include "third_party/blink/renderer/modules/webgl/webgl_rendering_context.h"
+#include "third_party/blink/renderer/modules/webgl/webgl2_rendering_context.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_texture.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
@@ -44,10 +44,14 @@ class Execution final : public ScriptWrappable {
 
   void setInput(uint32_t, MaybeShared<DOMArrayBufferView>, ExceptionState&);
   void setInput(uint32_t,
-                WebGLRenderingContext*,
+                WebGL2RenderingContext*,
                 WebGLTexture*,
                 ExceptionState&);
   void setOutput(uint32_t, MaybeShared<DOMArrayBufferView>, ExceptionState&);
+  void setOutput(uint32_t,
+                WebGL2RenderingContext*,
+                WebGLTexture*,
+                ExceptionState&);
   ScriptPromise startCompute(ScriptState*);
 
   void Trace(blink::Visitor*) override;
@@ -60,6 +64,7 @@ class Execution final : public ScriptWrappable {
   ml::mojom::blink::ExecutionPtr execution_;
   mojo::ScopedSharedBufferHandle memory_;
   WTF::Vector<std::unique_ptr<OperandInfo>> inputs_;
+  // WTF::Vector<OperandInfoPtr> operand_info_inputs_;
   WTF::Vector<std::unique_ptr<OperandInfo>> outputs_;
 
   HeapHashSet<Member<ScriptPromiseResolver>> requests_;

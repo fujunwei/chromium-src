@@ -32,7 +32,7 @@ class ExecutionImplMacMPS : public mojom::Execution {
   ~ExecutionImplMacMPS() override;
 
   void SetGpuMemoryBufferHandle(
-      gfx::GpuMemoryBufferHandle buffer_handle) override;
+      uint32 index, gfx::GpuMemoryBufferHandle buffer_handle) override;
   void StartCompute(StartComputeCallback callback) override;
 
   bool IsValid() const;

@@ -138,7 +138,7 @@ bool ExecutionImplMacBNNS::PrepareBnnsOperandsMemory() {
 }
 
 void ExecutionImplMacBNNS::SetGpuMemoryBufferHandle(
-    gfx::GpuMemoryBufferHandle handle) {
+    uint32 index, gfx::GpuMemoryBufferHandle handle) {
   NOTREACHED();
 }
 

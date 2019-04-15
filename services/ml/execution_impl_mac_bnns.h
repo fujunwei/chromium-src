@@ -25,7 +25,7 @@ class ExecutionImplMacBNNS : public mojom::Execution {
   ~ExecutionImplMacBNNS() override;
 
   bool PrepareBnnsOperandsMemory();
-  void SetGpuMemoryBufferHandle(gfx::GpuMemoryBufferHandle handle) override;
+  void SetGpuMemoryBufferHandle(uint32 index, gfx::GpuMemoryBufferHandle handle) override;
   void StartCompute(StartComputeCallback callback) override;
 
   bool IsValid() const;

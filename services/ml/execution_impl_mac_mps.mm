@@ -159,7 +159,8 @@ void ExecutionImplMacMPS::CreateOutputMTLBuffer() {
 }
 
 void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
-    gfx::GpuMemoryBufferHandle buffer_handle) {
+    uint32 index, gfx::GpuMemoryBufferHandle buffer_handle) {
+  LOG(ERROR) << "=====ExecutionImplMacMPS::SetGpuMemoryBufferHandle.";
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
       IOSurfaceLookupFromMachPort(buffer_handle.mach_port.get()));
   if (!io_surface) {
@@ -169,6 +170,25 @@ void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
   CVPixelBufferCreateWithIOSurface(nullptr, io_surface, nullptr,
                                    cv_pixel_buffer.InitializeInto());
+
+  CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+  const float* src = static_cast<float*>(CVPixelBufferGetBaseAddress(cv_pixel_buffer));
+  // const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(cv_pixel_buffer);
+  const size_t cv_height = CVPixelBufferGetHeight(cv_pixel_buffer);
+  const size_t cv_width = CVPixelBufferGetWidth(cv_pixel_buffer);
+  const OperandMac& operand = compilation_->operands_[index];
+  uint32_t n, width, height, channels;
+  if (!ml::GetMPSImageInfo(operand, n, width, height, channels)) {
+    LOG(ERROR) << "=====Fail to get MPSImage Info.";
+    return;
+  }
+  LOG(ERROR) << "======operand width = " << width << " " << height << " === cv "
+      << cv_width << " " << cv_height;
+  for (size_t i = 0; i < cv_width * cv_height; i++) {
+      LOG(ERROR) << "======the data = " << src[i];
+  }
+
+  CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
 }
 
 void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
