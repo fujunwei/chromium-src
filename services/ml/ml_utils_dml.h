@@ -50,12 +50,12 @@ struct OperationDML {
 
 struct OperandDML {
  public:
-  OperandDML(std::vector<uint32_t>& dimensions);
+  OperandDML(std::vector<uint32_t>&, bool depthwise = false);
   ~OperandDML();
 
   size_t SizeInBytes() { return operand_desc_.TotalTensorSizeInBytes; }
 
-  UINT strides_[4];
+  UINT strides_[5];
   DML_BUFFER_TENSOR_DESC operand_desc_;
 
   ComPtr<ID3D12Resource> operand_resource_;
