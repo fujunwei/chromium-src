@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "services/ml/dml_d3dx12_utils.h"
+#include "services/ml/float16_compressor.h"
 
 namespace ml {
 
@@ -78,7 +79,7 @@ OperandDML::OperandDML(const std::vector<uint32_t>& sizes,
     };
   }
 
-  operand_desc_.DataType = DML_TENSOR_DATA_TYPE_FLOAT32;
+  operand_desc_.DataType = DML_TENSOR_DATA_TYPE_FLOAT16;
   operand_desc_.Flags = DML_TENSOR_FLAG_NONE;
   operand_desc_.DimensionCount = dimensions_.size();
   operand_desc_.Sizes = dimensions_.data();
@@ -161,7 +162,7 @@ UINT64 DMLCalcBufferTensorSize(DML_TENSOR_DATA_TYPE dataType,
 
   // Round up to the nearest 4 bytes.
   UINT64 roundUpSizeInBytes = (minimumImpliedSizeInBytes + 3) & ~3ui64;
-  DCHECK(roundUpSizeInBytes == minimumImpliedSizeInBytes);
+  // DCHECK(roundUpSizeInBytes == minimumImpliedSizeInBytes);
 
   return roundUpSizeInBytes;
 }
@@ -189,7 +190,7 @@ HRESULT CloseExecuteResetWait(ComPtr<ID3D12Device> d3D12_device,
   hr = d3D12_device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
                                  IID_PPV_ARGS(&d3D12_fence));
 
-  HANDLE fence_event_handle = CreateEvent(nullptr, true, false, nullptr);
+  HANDLE fence_event_handle = CreateEvent(nullptr, false, false, nullptr);
   if (!fence_event_handle) {
     LOG(ERROR) << "Failed creating event.";
     return hr;
@@ -208,6 +209,8 @@ HRESULT CloseExecuteResetWait(ComPtr<ID3D12Device> d3D12_device,
   }
   WaitForSingleObjectEx(fence_event_handle, INFINITE, FALSE);
 
+  command_list.Reset();
+  command_allocator.Reset();
   return S_OK;
 }
 
@@ -238,7 +241,7 @@ HRESULT CreateOutputResource(uint64_t size,
       size, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
   HRESULT hr = d3D12_device->CreateCommittedResource(
       &default_heap, D3D12_HEAP_FLAG_NONE, &resource_desc,
-      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+      D3D12_RESOURCE_STATE_COMMON, nullptr,
       IID_PPV_ARGS(&intermediate_resource));
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed creating committed resource for output.";
@@ -294,7 +297,7 @@ HRESULT CreateUploadResource(uint64_t size,
       size, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
   hr = d3D12_device->CreateCommittedResource(
       &default_heap, D3D12_HEAP_FLAG_NONE, &resource_desc,
-      D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&input_resource));
+      D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&input_resource));
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed creating committed resource for coping";
     return hr;
@@ -302,14 +305,21 @@ HRESULT CreateUploadResource(uint64_t size,
   return S_OK;
 }
 
-HRESULT UploadTensorResource(const void* data,
+HRESULT UploadTensorResource(void* data,
                              uint64_t size,
                              ComPtr<ID3D12Resource>& upload_resource,
                              ComPtr<ID3D12Resource>& input_resource,
                              ComPtr<ID3D12GraphicsCommandList> command_list) {
+  // float32 -> float16
+  float* float32_data = static_cast<float*>(data);
+  std::vector<uint16_t> float16_data;
+  for (size_t i = 0; i < size / sizeof(float); ++i) {
+    float16_data.push_back(Float16Compressor::compress(float32_data[i]));
+  }
+
   D3D12_SUBRESOURCE_DATA subresource_data = {};
-  subresource_data.pData = data;
-  subresource_data.RowPitch = size;
+  subresource_data.pData = float16_data.data();
+  subresource_data.RowPitch = float16_data.size() * sizeof(uint16_t);
   subresource_data.SlicePitch = subresource_data.RowPitch;
 
   // Upload the input tensor to the GPU.

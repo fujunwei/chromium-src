@@ -374,8 +374,8 @@ HRESULT InitializeOperators(scoped_refptr<CompiledModelDML> dml,
 }
 
 HRESULT BindingTableForExecution(IDMLDevice* dml_device,
-                              OperationDML* operation,
-                              CompiledModelDML* dml) {
+                                 OperationDML* operation,
+                                 CompiledModelDML* dml) {
   // Create a table per executed operator.
   auto binding_props = operation->compiled_operator_->GetBindingProperties();
   DML_BINDING_TABLE_DESC table_desc = {
@@ -416,7 +416,7 @@ HRESULT BindingTableForExecution(IDMLDevice* dml_device,
       input_binding_array[i] = {DML_BINDING_TYPE_NONE, nullptr};
     } else {
       input_buffer_array[i] = {operand->operand_resource_.Get(), 0,
-                                 operand->SizeInBytes()};
+                               operand->SizeInBytes()};
       input_binding_array[i] = {DML_BINDING_TYPE_BUFFER,
                                 &input_buffer_array[i]};
     }
@@ -468,6 +468,18 @@ CompilationDelegateDML::CompilationDelegateDML(
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed creating DirectML.";
     return;
+  }
+  DML_FEATURE_QUERY_TENSOR_DATA_TYPE_SUPPORT fp16Query = { DML_TENSOR_DATA_TYPE_FLOAT16 };
+  DML_FEATURE_DATA_TENSOR_DATA_TYPE_SUPPORT fp16Supported = {};
+  hr = dml_->dml_device_->CheckFeatureSupport(DML_FEATURE_TENSOR_DATA_TYPE_SUPPORT,
+      sizeof(fp16Query), &fp16Query, sizeof(fp16Supported), &fp16Supported);
+  if (FAILED(hr)) {
+    LOG(ERROR) << "Failed creating DirectML.";
+    return;
+  }
+  if (!fp16Supported.IsSupported)
+  {
+      LOG(ERROR) << "FP16 data type support is required for this sample.";
   }
 }
 
@@ -533,7 +545,7 @@ int32_t CompilationDelegateDML::Compile() {
 
   for (size_t i = 0; i < dml_->operations_.size(); ++i) {
     hr = BindingTableForExecution(dml_->dml_device_.Get(),
-                               dml_->operations_[i].get(), dml_.get());
+                                  dml_->operations_[i].get(), dml_.get());
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed binding table for execution.";
     }
@@ -567,9 +579,9 @@ HRESULT CompilationDelegateDML::CompileOperator(
 
   // Compile the operator into an object that can be dispatched to the GPU.
   ComPtr<IDMLCompiledOperator> compiled_operator;
-  hr = dml_->dml_device_->CompileOperator(dml_operator.Get(),
-                                          DML_EXECUTION_FLAG_NONE,
-                                          IID_PPV_ARGS(&compiled_operator));
+  hr = dml_->dml_device_->CompileOperator(
+      dml_operator.Get(), DML_EXECUTION_FLAG_ALLOW_HALF_PRECISION_COMPUTATION,
+      IID_PPV_ARGS(&compiled_operator));
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed compiling operator.";
     return hr;

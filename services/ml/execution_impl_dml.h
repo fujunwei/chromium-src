@@ -36,7 +36,6 @@ class ExecutionImplDML : public mojom::Execution {
 
   mojom::ExecutionInitParamsPtr params_;
   scoped_refptr<CompiledModelDML> dml_;
-  uint32_t memory_offset_;
 
   DISALLOW_COPY_AND_ASSIGN(ExecutionImplDML);
 };

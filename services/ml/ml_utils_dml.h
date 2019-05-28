@@ -132,7 +132,7 @@ HRESULT CreateUploadResource(uint64_t size,
                              ComPtr<ID3D12Resource>& input_resource,
                              ComPtr<ID3D12Device> d3D12_device);
 
-HRESULT UploadTensorResource(const void* data,
+HRESULT UploadTensorResource(void* data,
                              uint64_t size,
                              ComPtr<ID3D12Resource>& upload_resource,
                              ComPtr<ID3D12Resource>& input_resource,

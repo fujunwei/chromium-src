@@ -11,25 +11,32 @@
 
 #include "services/ml/common.h"
 #include "services/ml/dml_d3dx12_utils.h"
+#include "services/ml/float16_compressor.h"
 #include "services/ml/public/mojom/constants.mojom.h"
 
 namespace ml {
 
 ExecutionImplDML::ExecutionImplDML(scoped_refptr<CompiledModelDML> dml,
                                    mojom::ExecutionInitParamsPtr params)
-    : params_(std::move(params)), dml_(dml), memory_offset_(0) {
+    : params_(std::move(params)), dml_(dml) {}
+
+ExecutionImplDML::~ExecutionImplDML() = default;
+
+void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
   // Bind and execute the operator on the GPU.
   ID3D12DescriptorHeap* d3D12_descriptor_heaps[] = {
       dml_->descriptor_heap_.Get()};
   dml_->command_list_->SetDescriptorHeaps(ARRAYSIZE(d3D12_descriptor_heaps),
                                           d3D12_descriptor_heaps);
 
+  unsigned long long sys_1 = GetCurrentTimeMsec();
+  uint32_t memory_offset = 0;
   HRESULT hr = S_OK;
   for (size_t i = 0; i < params_->inputs.size(); ++i) {
     const mojom::OperandInfoPtr& operand = params_->inputs[i];
-    uint32_t offset = memory_offset_;
+    uint32_t offset = memory_offset;
     uint32_t length = GetRequiredSize(operand);
-    memory_offset_ += length;
+    memory_offset += length;
     auto mapping = params_->memory->MapAtOffset(length, offset);
     ComPtr<ID3D12Resource> upload_resource =
         dml_->operand_map_[operand->index]->upload_resource_;
@@ -42,13 +49,14 @@ ExecutionImplDML::ExecutionImplDML(scoped_refptr<CompiledModelDML> dml,
       LOG(ERROR) << "Failed uploading tensor resource for inputs data.";
     }
   }
-}
-
-ExecutionImplDML::~ExecutionImplDML() = default;
-
-void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
-  unsigned long long sys_1 = GetCurrentTimeMsec();
-  HRESULT hr = S_OK;
+  // hr = CloseExecuteResetWait(dml_->d3d12_device_, dml_->command_queue_,
+  //                            dml_->command_allocator_, dml_->command_list_);
+  // if (FAILED(hr)) {
+  //   LOG(ERROR) << "Failed executing command list for compiled operators.";
+  //   return;
+  // }
+  unsigned long long sys_2 = GetCurrentTimeMsec();
+  LOG(ERROR) << L"======upload time: " << sys_2 - sys_1 << "\n";
   for (size_t i = 0; i < dml_->operations_.size(); ++i) {
     hr = ExecuteCompiledOperator(dml_->operations_[i]->compiled_operator_.Get(),
                                  dml_->operations_[i], i);
@@ -64,10 +72,10 @@ void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
     LOG(ERROR) << "Failed executing command list for compiled operators.";
     return;
   }
-  unsigned long long sys_2 = GetCurrentTimeMsec();
-  LOG(ERROR) << L"======predict time: " << sys_2 - sys_1 << "\n";
+  sys_1 = GetCurrentTimeMsec();
+  LOG(ERROR) << L"======predict time: " << sys_1 - sys_2 << "\n";
 
-  hr = ReadResultBack(memory_offset_);
+  hr = ReadResultBack(memory_offset);
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed reading result.";
     std::move(callback).Run(mojom::OP_FAILED);
@@ -119,19 +127,29 @@ HRESULT ExecutionImplDML::ReadResultBack(uint32_t memory_offset) {
     size_t output_index = params_->outputs[i]->index;
     ComPtr<ID3D12Resource> readback_buffer =
         dml_->operand_map_[output_index]->readback_resource_;
-    const mojom::OperandInfoPtr& operand = params_->outputs[i];
-    const uint32_t offset = memory_offset;
-    const uint32_t output_buffer_size = GetRequiredSize(operand);
-    memory_offset += output_buffer_size;
-    auto mapping = params_->memory->MapAtOffset(output_buffer_size, offset);
-    D3D12_RANGE tensor_buffer_range = {0, output_buffer_size};
+    D3D12_RANGE tensor_buffer_range = {
+        0, dml_->operand_map_[output_index]->SizeInBytes()};
     void* output_buffer_data = nullptr;
     hr = readback_buffer->Map(0, &tensor_buffer_range, &output_buffer_data);
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed map buffer for reading result.";
       return hr;
     }
-    memcpy(mapping.get(), output_buffer_data, output_buffer_size);
+    // Convert float16 to float32.
+    uint16_t* float16_data = static_cast<uint16_t*>(output_buffer_data);
+    std::vector<float> float32_data;
+    const mojom::OperandInfoPtr& operand = params_->outputs[i];
+    size_t length = product(operand->dimensions);
+    for (size_t i = 0; i < length; ++i) {
+      float32_data.push_back(Float16Compressor::decompress(float16_data[i]));
+    }
+
+    // Copy to out memory.
+    const uint32_t offset = memory_offset;
+    const uint32_t output_buffer_size = GetRequiredSize(operand);
+    memory_offset += output_buffer_size;
+    auto mapping = params_->memory->MapAtOffset(output_buffer_size, offset);
+    memcpy(mapping.get(), float32_data.data(), output_buffer_size);
 
     D3D12_RANGE empty_range{0, 0};
     readback_buffer->Unmap(0, &empty_range);
