@@ -7,7 +7,7 @@
 
 #include "services/ml/compilation_delegate_dml.h"
 
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 
 #include "base/logging.h"
 // TODO: Window sdk should be upgraded to 10.0.18361.0 in VS
@@ -46,15 +46,31 @@ HRESULT InitializeDirect3D12(ComPtr<ID3D12Device>& d3D12_device,
     LOG(ERROR) << "Failed creating DXGI factory.";
     return hr;
   }
+  ComPtr<IDXGIFactory6> factory6;
+  hr = dxgi_factory.As(&factory6);
+  if (FAILED(hr)) {
+    LOG(ERROR) << "Failed creating DXGI factory.";
+    return hr;
+  }
 
-  ComPtr<IDXGIAdapter> dxgi_adapter;
+  ComPtr<IDXGIAdapter1> dxgi_adapter;
   size_t adapter_index = 0;
   do {
     dxgi_adapter = nullptr;
-    hr = dxgi_factory->EnumAdapters(adapter_index, &dxgi_adapter);
-    if (FAILED(hr))
-      return hr;
+    if (DXGI_ERROR_NOT_FOUND == factory6->EnumAdapterByGpuPreference(
+                                    adapter_index,
+                                    DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+                                    IID_PPV_ARGS(&dxgi_adapter)))
+      return E_FAIL;
     ++adapter_index;
+
+    DXGI_ADAPTER_DESC1 desc;
+    dxgi_adapter->GetDesc1(&desc);
+
+    if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+      // Don't select the Basic Render Driver adapter.
+      continue;
+    }
 
     hr = D3D(D3D12CreateDevice)(dxgi_adapter.Get(), D3D_FEATURE_LEVEL_12_0,
                                 IID_PPV_ARGS(&d3D12_device));
@@ -470,6 +486,7 @@ int32_t CompilationDelegateDML::Compile() {
                   "outputs.";
     return mojom::OP_FAILED;
   }
+  unsigned long long sys_1 = GetCurrentTimeMsec();
 
   // Compile operations of model.
   for (size_t i = 0; i < model->operations.size(); ++i) {
@@ -521,6 +538,8 @@ int32_t CompilationDelegateDML::Compile() {
       LOG(ERROR) << "Failed binding table for execution.";
     }
   }
+  unsigned long long sys_2 = GetCurrentTimeMsec();
+  LOG(ERROR) << L"======CompilationDelegateDML time: " << sys_2 - sys_1 << "\n";
 
   return mojom::NOT_ERROR;
 }

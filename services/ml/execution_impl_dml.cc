@@ -17,24 +17,19 @@ namespace ml {
 
 ExecutionImplDML::ExecutionImplDML(scoped_refptr<CompiledModelDML> dml,
                                    mojom::ExecutionInitParamsPtr params)
-    : params_(std::move(params)), dml_(dml) {}
-
-ExecutionImplDML::~ExecutionImplDML() = default;
-
-void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
+    : params_(std::move(params)), dml_(dml), memory_offset_(0) {
   // Bind and execute the operator on the GPU.
   ID3D12DescriptorHeap* d3D12_descriptor_heaps[] = {
       dml_->descriptor_heap_.Get()};
   dml_->command_list_->SetDescriptorHeaps(ARRAYSIZE(d3D12_descriptor_heaps),
                                           d3D12_descriptor_heaps);
 
-  uint32_t memory_offset = 0;
   HRESULT hr = S_OK;
   for (size_t i = 0; i < params_->inputs.size(); ++i) {
     const mojom::OperandInfoPtr& operand = params_->inputs[i];
-    uint32_t offset = memory_offset;
+    uint32_t offset = memory_offset_;
     uint32_t length = GetRequiredSize(operand);
-    memory_offset += length;
+    memory_offset_ += length;
     auto mapping = params_->memory->MapAtOffset(length, offset);
     ComPtr<ID3D12Resource> upload_resource =
         dml_->operand_map_[operand->index]->upload_resource_;
@@ -45,11 +40,15 @@ void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
                               dml_->command_list_);
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed uploading tensor resource for inputs data.";
-      std::move(callback).Run(mojom::BAD_DATA);
-      return;
     }
   }
+}
 
+ExecutionImplDML::~ExecutionImplDML() = default;
+
+void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
+  unsigned long long sys_1 = GetCurrentTimeMsec();
+  HRESULT hr = S_OK;
   for (size_t i = 0; i < dml_->operations_.size(); ++i) {
     hr = ExecuteCompiledOperator(dml_->operations_[i]->compiled_operator_.Get(),
                                  dml_->operations_[i], i);
@@ -65,8 +64,10 @@ void ExecutionImplDML::StartCompute(StartComputeCallback callback) {
     LOG(ERROR) << "Failed executing command list for compiled operators.";
     return;
   }
+  unsigned long long sys_2 = GetCurrentTimeMsec();
+  LOG(ERROR) << L"======predict time: " << sys_2 - sys_1 << "\n";
 
-  hr = ReadResultBack(memory_offset);
+  hr = ReadResultBack(memory_offset_);
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed reading result.";
     std::move(callback).Run(mojom::OP_FAILED);

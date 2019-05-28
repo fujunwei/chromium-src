@@ -19,6 +19,13 @@
 // seeing https://chromium-review.googlesource.com/c/chromium/src/+/1054027
 #include "services/ml/direct_ml.h"
 
+#ifdef _WIN32
+#include <time.h>
+#include <winsock2.h>
+#else
+#include <sys/time.h>
+#endif
+
 using Microsoft::WRL::ComPtr;
 
 namespace ml {
@@ -130,6 +137,8 @@ HRESULT UploadTensorResource(const void* data,
                              ComPtr<ID3D12Resource>& upload_resource,
                              ComPtr<ID3D12Resource>& input_resource,
                              ComPtr<ID3D12GraphicsCommandList> command_list);
+
+unsigned long long GetCurrentTimeMsec();
 }  // namespace ml
 
 #endif  // SERVICES_ML_ML_UTILS_DML_H_
