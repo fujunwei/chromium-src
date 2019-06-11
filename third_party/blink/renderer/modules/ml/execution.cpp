@@ -22,6 +22,9 @@
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "ui/gfx/mojo/buffer_types.mojom-blink.h"
+#include "third_party/blink/renderer/modules/ml/opengl_renderer.h"
+
+#include "third_party/blink/renderer/modules/ml/vertex_shader.h"
 
 namespace blink {
 
@@ -168,6 +171,15 @@ void Execution::setInput(uint32_t index,
   gpu::gles2::GLES2Interface* gl = drawing_buffer->ContextGL();
   WebGraphicsContext3DProvider* context_provider =
       drawing_buffer->ContextProvider();
+  {
+    WTF::String vertSourceString(VERTEX_SHADER);
+    WebGLShader* shader = context->createShader(GL_VERTEX_SHADER);
+    context->shaderSource(shader, vertSourceString);
+
+    context->compileShader(shader);
+
+      LOG(ERROR) << "======== Vtx Shader compile log:" << context->getShaderInfoLog(shader);
+  }
 
   gpu::SharedImageInterface* sii = context_provider->SharedImageInterface();
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
@@ -180,7 +192,7 @@ void Execution::setInput(uint32_t index,
   // if (!GetOperandInfo(operand_info_inputs_[index], n, width, height, channels)) {
   //   return;
   // }
-  IntSize size(1, 1);
+  IntSize size(2, 2);
   gpu_memory_buffer = gpu_memory_buffer_manager->CreateGpuMemoryBuffer(
       gfx::Size(size), gfx::BufferFormat::RGBA_F16, gfx::BufferUsage::SCANOUT,
       gpu::kNullSurfaceHandle);
@@ -208,7 +220,7 @@ void Execution::setInput(uint32_t index,
 
 
   // Testing.
-  if (false) {
+  if (true) {
     GLuint fbo = 0;
     gl->GenFramebuffers(1, &fbo);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -230,9 +242,10 @@ void Execution::setInput(uint32_t index,
         << " " << color[3];
   }
 
-  gl->CopyTextureCHROMIUM(ObjectOrZero(texture), 0,
-                          GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0, GL_RGBA,
-                          GL_FLOAT, false, true, false);
+  // gl->CopyTextureCHROMIUM(ObjectOrZero(texture), 0,
+  //                         GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0, GL_RGBA,
+  //                         GL_FLOAT, false, true, false);
+
   // GLboolean unpack_premultiply_alpha_needed = GL_FALSE;
   // GLboolean unpack_unpremultiply_alpha_needed = GL_FALSE;
   // // if (want_alpha_channel_ && premultiplied_alpha_ && !premultiply_alpha)
@@ -278,6 +291,30 @@ void Execution::setInput(uint32_t index,
 //     LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " << color[2];
 // }
 
+  {
+    GLuint fbo = 0;
+    // Create a "frameBufferObject" with the interop texture as the color buffer.
+    gl->GenFramebuffers(1, &fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
+    // macOS CVPixelBuffer textures created as rectangle textures.
+    gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_RECTANGLE, texture_id,
+                           0);
+
+    // Initialize the openGL render.
+    OpenGLRenderer* render = new OpenGLRenderer(gl);
+
+    // Set initial OpenGL rendering size to interop texture size.
+    gl->Viewport(0, 0, 2, 2);
+
+    // Execute OpenGL renderer draw routine to build.
+    render->Draw(fbo, GL_TEXTURE_2D, ObjectOrZero(texture));
+
+    // When rendering to a CVPixelBuffer with OpenGL, call glFlush to ensure
+    // OpenGL commands are excuted on the pixel buffer before Metal reads the
+    // buffer.
+    gl->Flush();
+  }
 
 
   gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();

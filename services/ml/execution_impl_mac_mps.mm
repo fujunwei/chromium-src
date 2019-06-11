@@ -14,6 +14,8 @@
 #include "services/ml/mpscnn_context.h"
 #include "services/ml/public/mojom/constants.mojom.h"
 
+#include "services/ml/opengl_metal_mac/shared_metal.h"
+
 namespace ml {
 
 namespace {
@@ -195,6 +197,8 @@ void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
   DLOG(INFO) << "ExecutionImplMac::StartCompute";
   bool success = true;
   if (@available(macOS 10.13, *)) {
+    SharedMetal* test = [[SharedMetal alloc] initWithTextureSize:CGSizeMake(10, 10)];
+    [test testSharedMetal];
     do {
       @autoreleasepool {
         id<MTLCommandBuffer> command_buffer =
