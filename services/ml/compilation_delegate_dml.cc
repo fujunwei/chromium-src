@@ -260,13 +260,48 @@ void FreeUnusedResources(CompiledModelDML* dml,
 HRESULT InitializeOperators(scoped_refptr<CompiledModelDML> dml,
                             uint32_t execute_descriptor_count,
                             uint64_t execute_temporary_resource_size) {
+  // Query the operator for the required size in descriptors of its binding
+  // table.
+  // Create descriptor heaps.
+  ComPtr<ID3D12DescriptorHeap> descriptor_heap;
+  D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc = {};
+  descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+  descriptor_heap_desc.NumDescriptors = execute_descriptor_count;
+  descriptor_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+  HRESULT hr = dml->d3d12_device_->CreateDescriptorHeap(
+      &descriptor_heap_desc, IID_PPV_ARGS(&descriptor_heap));
+  if (FAILED(hr)) {
+    LOG(ERROR) << "Failed creating descriptor heap.";
+    return hr;
+  }
+
+  // Set the descriptor heap(s).
+  ID3D12DescriptorHeap* d3D12_descriptor_heaps[] = {descriptor_heap.Get()};
+  dml->command_list_->SetDescriptorHeaps(ARRAYSIZE(d3D12_descriptor_heaps),
+                                         d3D12_descriptor_heaps);
+  dml->descriptor_heap_ = std::move(descriptor_heap);
+
+  dml->temporary_resource_size_ = execute_temporary_resource_size;
+  if (dml->temporary_resource_size_ > 0) {
+    hr = CreateCommonResource(dml->temporary_resource_size_,
+                              dml->temporary_buffer_, dml->d3d12_device_);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "Failed creating committed resource for temorary buffer.";
+      return hr;
+    }
+  }
+
   size_t size = dml->operations_.size();
   DML_BUFFER_ARRAY_BINDING init_buffer_array[size];
   DML_BINDING_DESC init_binding_array[size];
   DML_BUFFER_BINDING persistent_buffers[size];
   DML_BINDING_DESC persistent_bindings[size];
-  IDMLCompiledOperator* compiled_operators[size];
+  IDMLCompiledOperator* compiled_operators[1];
+  ComPtr<IDMLOperatorInitializer> operator_initializer[size];
   for (size_t i = 0; i < size; i++) {
+    if (i == 29) {
+      LOG(ERROR) << "=====29";
+    }
     OperationDML* operation = dml->operations_[i].get();
     // Inputs binding desc for initializeing.
     init_buffer_array[i] = {operation->bind_inputs_size,
@@ -285,87 +320,56 @@ HRESULT InitializeOperators(scoped_refptr<CompiledModelDML> dml,
     }
 
     // Compiled operators for initializeing.
-    compiled_operators[i] = dml->operations_[i]->compiled_operator_.Get();
-  }
-  ComPtr<IDMLOperatorInitializer> operator_initializer;
-  HRESULT hr = dml->dml_device_->CreateOperatorInitializer(
-      size, compiled_operators, IID_PPV_ARGS(&operator_initializer));
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Failed creating operator initializer.";
-    return hr;
-  }
-  // Query the operator for the required size in descriptors of its binding
-  // table.
-  DML_BINDING_PROPERTIES initialize_binding_properties =
-      operator_initializer->GetBindingProperties();
-  UINT descriptor_count =
-      std::max(initialize_binding_properties.RequiredDescriptorCount,
-               execute_descriptor_count);
+    compiled_operators[0] = dml->operations_[i]->compiled_operator_.Get();
 
-  // Create descriptor heaps.
-  ComPtr<ID3D12DescriptorHeap> descriptor_heap;
-  D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc = {};
-  descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-  descriptor_heap_desc.NumDescriptors = descriptor_count;
-  descriptor_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-  hr = dml->d3d12_device_->CreateDescriptorHeap(&descriptor_heap_desc,
-                                                IID_PPV_ARGS(&descriptor_heap));
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Failed creating descriptor heap.";
-    return hr;
-  }
-
-  // Set the descriptor heap(s).
-  ID3D12DescriptorHeap* d3D12_descriptor_heaps[] = {descriptor_heap.Get()};
-  dml->command_list_->SetDescriptorHeaps(ARRAYSIZE(d3D12_descriptor_heaps),
-                                         d3D12_descriptor_heaps);
-
-  // Create a binding table over the descriptor heap we just created.
-  DML_BINDING_TABLE_DESC binding_table_desc = {};
-  binding_table_desc.Dispatchable = operator_initializer.Get();
-  binding_table_desc.CPUDescriptorHandle =
-      descriptor_heap->GetCPUDescriptorHandleForHeapStart();
-  binding_table_desc.GPUDescriptorHandle =
-      descriptor_heap->GetGPUDescriptorHandleForHeapStart();
-  binding_table_desc.SizeInDescriptors = descriptor_count;
-  ComPtr<IDMLBindingTable> binding_table;
-  hr = dml->dml_device_->CreateBindingTable(&binding_table_desc,
-                                            IID_PPV_ARGS(&binding_table));
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Failed creating binding table.";
-    return hr;
-  }
-  binding_table->BindInputs(size, init_binding_array);
-  binding_table->BindOutputs(size, persistent_bindings);
-
-  dml->descriptor_heap_ = std::move(descriptor_heap);
-
-  dml->temporary_resource_size_ =
-      std::max(initialize_binding_properties.TemporaryResourceSize,
-               execute_temporary_resource_size);
-  if (dml->temporary_resource_size_ != 0) {
-    hr = CreateCommonResource(dml->temporary_resource_size_,
-                              dml->temporary_buffer_, dml->d3d12_device_);
+    hr = dml->dml_device_->CreateOperatorInitializer(
+        1, compiled_operators, IID_PPV_ARGS(&operator_initializer[i]));
     if (FAILED(hr)) {
-      LOG(ERROR) << "Failed creating committed resource for temorary buffer.";
+      LOG(ERROR) << "Failed creating operator initializer.";
       return hr;
     }
-  }
 
-  // The command recorder is a stateless object that records Dispatches into an
-  // existing Direct3D 12 command list.
-  ComPtr<IDMLCommandRecorder> command_recorder;
-  hr = dml->dml_device_->CreateCommandRecorder(
-      IID_PPV_ARGS(&dml->command_recorder_));
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Failed creating command recorder.";
-    return hr;
-  }
+    // dml->operations_[i]->descriptor_index_ = execute_descriptor_count_;
+    // DML_BINDING_PROPERTIES execute_binding_properties =
+    //   dml->operations_[i]->compiled_operator_->GetBindingProperties();
+    DML_BINDING_PROPERTIES initialize_binding_properties =
+        operator_initializer[i]->GetBindingProperties();
+    // execute_descriptor_count_ +=
+    // std::max(execute_binding_properties.RequiredDescriptorCount,
+    //     initialize_binding_properties.RequiredDescriptorCount);
 
-  // Record execution of the operator initializer.
-  dml->command_recorder_->RecordDispatch(dml->command_list_.Get(),
-                                         operator_initializer.Get(),
-                                         binding_table.Get());
+    // Create a binding table over the descriptor heap we just created.
+    DML_BINDING_TABLE_DESC binding_table_desc = {};
+    binding_table_desc.Dispatchable = operator_initializer[i].Get();
+    binding_table_desc.CPUDescriptorHandle =
+        dml->GetCpuHandle(dml->operations_[i]->descriptor_index_);
+    binding_table_desc.GPUDescriptorHandle =
+        dml->GetGpuHandle(dml->operations_[i]->descriptor_index_);
+    binding_table_desc.SizeInDescriptors =
+        initialize_binding_properties.RequiredDescriptorCount;
+    ComPtr<IDMLBindingTable> binding_table;
+    hr = dml->dml_device_->CreateBindingTable(&binding_table_desc,
+                                              IID_PPV_ARGS(&binding_table));
+    if (FAILED(hr)) {
+      LOG(ERROR) << "Failed creating binding table.";
+      return hr;
+    }
+    binding_table->BindInputs(1, &init_binding_array[i]);
+    binding_table->BindOutputs(1, &persistent_bindings[i]);
+
+    if (initialize_binding_properties.TemporaryResourceSize != 0) {
+      DML_BUFFER_BINDING buffer_binding = {dml->temporary_buffer_.Get(), 0,
+                                           dml->temporary_resource_size_};
+      DML_BINDING_DESC binding_desc = {DML_BINDING_TYPE_BUFFER,
+                                       &buffer_binding};
+      binding_table->BindTemporaryResource(&binding_desc);
+    }
+
+    // Record execution of the operator initializer.
+    dml->command_recorder_->RecordDispatch(dml->command_list_.Get(),
+                                           operator_initializer[i].Get(),
+                                           binding_table.Get());
+  }
 
   // Close the Direct3D 12 command list, and submit it for execution.
   hr = CloseExecuteResetWait(dml->d3d12_device_, dml->command_queue_,
@@ -479,6 +483,15 @@ CompilationDelegateDML::CompilationDelegateDML(
                             IID_PPV_ARGS(&dml_->dml_device_));
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed creating DirectML.";
+    return;
+  }
+  // The command recorder is a stateless object that records Dispatches into an
+  // existing Direct3D 12 command list.
+  ComPtr<IDMLCommandRecorder> command_recorder;
+  hr = dml_->dml_device_->CreateCommandRecorder(
+      IID_PPV_ARGS(&dml_->command_recorder_));
+  if (FAILED(hr)) {
+    LOG(ERROR) << "Failed creating command recorder.";
     return;
   }
 
