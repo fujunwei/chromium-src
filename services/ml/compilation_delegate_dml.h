@@ -38,7 +38,8 @@ class CompilationDelegateDML : public CompilationDelegate {
   HRESULT CompileOperator(DML_OPERATOR_DESC&,
                           size_t,
                           const std::vector<uint32_t>&,
-                          const std::vector<uint32_t>&);
+                          const std::vector<uint32_t>&,
+                          int32_t type);
   HRESULT CompileActivation(int32_t fuse_code, std::vector<uint32_t>);
   HRESULT CompileArithmetic(const mojom::ModelInfoPtr& model,
                             const mojom::OperationPtr& operation);
@@ -52,13 +53,30 @@ class CompilationDelegateDML : public CompilationDelegate {
                          const mojom::OperationPtr& operation);
   HRESULT CompileConcatenation(const mojom::ModelInfoPtr& model,
                                const mojom::OperationPtr& operation);
+  HRESULT ConvertToNHWC(const mojom::ModelInfoPtr& model,
+                        const mojom::OperationPtr& operation);
   HRESULT CompileFullyConnected(const mojom::ModelInfoPtr& model,
                                const mojom::OperationPtr& operation);
   HRESULT CompileBilinearScale(const mojom::ModelInfoPtr& model,
                                const mojom::OperationPtr& operation);
+  HRESULT InitializeOperators(scoped_refptr<CompiledModelDML> dml,
+                              uint32_t execute_descriptor_count,
+                              uint64_t execute_temporary_resource_size);
+  HRESULT BindingTableForExecution(IDMLDevice* dml_device,
+                                   CompiledModelDML* dml);
   scoped_refptr<CompiledModelDML> dml_;
   uint32_t execute_descriptor_count_;
   uint64_t execute_temporary_resource_size_;
+  size_t temp_operand_index_;
+
+  std::map<uint32_t, ComPtr<IDMLOperatorInitializer>> operator_initializer_;
+  // std::map<uint32_t, std::vector<ComPtr<IDMLCompiledOperator>>>
+  // compiled_operators_;
+  // std::vector<uint32_t> is the set of operation index.
+  std::map<uint32_t, std::vector<uint32_t>> operation_indexes_;
+  std::map<uint32_t, ComPtr<IDMLBindingTable>> init_binding_table_;
+  std::map<uint32_t, uint32_t> descriptor_count_;
+  std::map<uint32_t, uint32_t> descriptor_index_;
 
   DISALLOW_COPY_AND_ASSIGN(CompilationDelegateDML);
 };
