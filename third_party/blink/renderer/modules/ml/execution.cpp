@@ -18,11 +18,11 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/modules/ml/opengl_renderer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "ui/gfx/mojo/buffer_types.mojom-blink.h"
-#include "third_party/blink/renderer/modules/ml/opengl_renderer.h"
 
 #include "third_party/blink/renderer/modules/ml/vertex_shader.h"
 
@@ -178,7 +178,8 @@ void Execution::setInput(uint32_t index,
 
     context->compileShader(shader);
 
-      LOG(ERROR) << "======== Vtx Shader compile log:" << context->getShaderInfoLog(shader);
+    LOG(ERROR) << "======== Vtx Shader compile log:"
+               << context->getShaderInfoLog(shader);
   }
 
   gpu::SharedImageInterface* sii = context_provider->SharedImageInterface();
@@ -189,10 +190,11 @@ void Execution::setInput(uint32_t index,
   GLuint texture_id = 0;
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
   // uint32_t n, width, height, channels;
-  // if (!GetOperandInfo(operand_info_inputs_[index], n, width, height, channels)) {
+  // if (!GetOperandInfo(operand_info_inputs_[index], n, width, height,
+  // channels)) {
   //   return;
   // }
-  IntSize size(2, 2);
+  IntSize size(10, 10);
   gpu_memory_buffer = gpu_memory_buffer_manager->CreateGpuMemoryBuffer(
       gfx::Size(size), gfx::BufferFormat::RGBA_F16, gfx::BufferUsage::SCANOUT,
       gpu::kNullSurfaceHandle);
@@ -211,16 +213,15 @@ void Execution::setInput(uint32_t index,
   gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
   texture_id = gl->CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name);
 
-        // gl->DeleteTextures(1, &texture_id);
-        // gl_->DeleteFramebuffers(1, &framebuffer);
+  // gl->DeleteTextures(1, &texture_id);
+  // gl_->DeleteFramebuffers(1, &framebuffer);
 
   gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
   gl->BeginSharedImageAccessDirectCHROMIUM(
       texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
 
-
   // Testing.
-  if (true) {
+  if (false) {
     GLuint fbo = 0;
     gl->GenFramebuffers(1, &fbo);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -231,15 +232,17 @@ void Execution::setInput(uint32_t index,
 
     // uint32_t result;
     // gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
-    // The expected result is 4278255360.
+    // // The expected result is 4278255360.
 
-    // float dirty_color[4] = { 1.3f, 1.4f, 1.5f, 1.0f };
-    // gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_HALF_FLOAT, dirty_color);
-    // gl->Flush();
-    float color[4] = { 0 };
+    gl->BindTexture(GL_TEXTURE_2D, ObjectOrZero(texture));
+    float dirty_color[4] = {1.3f, 1.4f, 1.5f, 1.0f};
+    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_FLOAT,
+                      dirty_color);
+    gl->Flush();
+    float color[4] = {0};
     gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, &color);
     LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " << color[2]
-        << " " << color[3];
+               << " " << color[3];
   }
 
   // gl->CopyTextureCHROMIUM(ObjectOrZero(texture), 0,
@@ -250,7 +253,8 @@ void Execution::setInput(uint32_t index,
   // GLboolean unpack_unpremultiply_alpha_needed = GL_FALSE;
   // // if (want_alpha_channel_ && premultiplied_alpha_ && !premultiply_alpha)
   // //   unpack_unpremultiply_alpha_needed = GL_TRUE;
-  // // else if (want_alpha_channel_ && !premultiplied_alpha_ && premultiply_alpha)
+  // // else if (want_alpha_channel_ && !premultiplied_alpha_ &&
+  // premultiply_alpha)
   // //   unpack_premultiply_alpha_needed = GL_TRUE;
 
   // gl->BeginSharedImageAccessDirectCHROMIUM(
@@ -264,48 +268,59 @@ void Execution::setInput(uint32_t index,
   // dst_gl->EndSharedImageAccessDirectCHROMIUM(src_texture);
   // dst_gl->DeleteTextures(1, &src_texture);
 
-//     {
-//   // GLuint tex = 1;
-//   // gl->GenTextures(1, &tex);
-//   // gl->BindTexture(GL_TEXTURE_2D, tex);
-//   // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 256, 256, 0, GL_RGB, GL_HALF_FLOAT, nullptr);
+  //     {
+  //   // GLuint tex = 1;
+  //   // gl->GenTextures(1, &tex);
+  //   // gl->BindTexture(GL_TEXTURE_2D, tex);
+  //   // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 256, 256, 0, GL_RGB,
+  //   GL_HALF_FLOAT, nullptr);
 
-//   GLuint fbo = 1;
-//     gl->GenFramebuffers(1, &fbo);
-//   gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
-//   gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
+  //   GLuint fbo = 1;
+  //     gl->GenFramebuffers(1, &fbo);
+  //   gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
+  //   gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  //   GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
 
-//   // const float clear_color[4] = { 1.0f, 32.0f, 0.5f, 1.0f };
-//   // gl->ClearColor(clear_color[0], clear_color[1], clear_color[2], 1.0f);
-//   // gl->Clear(GL_COLOR_BUFFER_BIT);
+  //   // const float clear_color[4] = { 1.0f, 32.0f, 0.5f, 1.0f };
+  //   // gl->ClearColor(clear_color[0], clear_color[1], clear_color[2], 1.0f);
+  //   // gl->Clear(GL_COLOR_BUFFER_BIT);
 
-//   // uint16_t pixel[3] = { 0x1234, 0x3F80, 0xAAAA };
-//   // GLint x = 6;
-//   // GLint y = 3;
-//   // gl->TexSubImage2D(GL_TEXTURE_2D, 0, x, y, 1, 1, GL_RGB, GL_HALF_FLOAT, pixel);
+  //   // uint16_t pixel[3] = { 0x1234, 0x3F80, 0xAAAA };
+  //   // GLint x = 6;
+  //   // GLint y = 3;
+  //   // gl->TexSubImage2D(GL_TEXTURE_2D, 0, x, y, 1, 1, GL_RGB, GL_HALF_FLOAT,
+  //   pixel);
 
-//   // This relies on GL_HALF_FLOAT being a valid type for read-back,
-//   // which isn't guaranteed by the spec but is supported by SwiftShader.
-//   uint16_t color[3] = { 0, 0, 0 };
-//   gl->ReadPixels(0, 0, 1, 1, GL_RGB, GL_FLOAT, &color);
-//     LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " << color[2];
-// }
+  //   // This relies on GL_HALF_FLOAT being a valid type for read-back,
+  //   // which isn't guaranteed by the spec but is supported by SwiftShader.
+  //   uint16_t color[3] = { 0, 0, 0 };
+  //   gl->ReadPixels(0, 0, 1, 1, GL_RGB, GL_FLOAT, &color);
+  //     LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " <<
+  //     color[2];
+  // }
+  GLuint temp_texture;
+  if (true) {
+    gl->GenTextures(1, &temp_texture);
+    gl->BindTexture(GL_TEXTURE_2D, temp_texture);
+    gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 10, 10, 0, GL_RGBA, GL_FLOAT,
+                   NULL);
+  }
 
   {
     GLuint fbo = 0;
-    // Create a "frameBufferObject" with the interop texture as the color buffer.
+    // Create a "frameBufferObject" with the interop texture as the color
+    // buffer.
     gl->GenFramebuffers(1, &fbo);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
     // macOS CVPixelBuffer textures created as rectangle textures.
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                           GL_TEXTURE_RECTANGLE, texture_id,
-                           0);
+                             GL_TEXTURE_2D, temp_texture, 0);
 
     // Initialize the openGL render.
     OpenGLRenderer* render = new OpenGLRenderer(gl);
 
     // Set initial OpenGL rendering size to interop texture size.
-    gl->Viewport(0, 0, 2, 2);
+    gl->Viewport(0, 0, 10, 10);
 
     // Execute OpenGL renderer draw routine to build.
     render->Draw(fbo, GL_TEXTURE_2D, ObjectOrZero(texture));
@@ -315,7 +330,27 @@ void Execution::setInput(uint32_t index,
     // buffer.
     gl->Flush();
   }
+  if (true) {
+    gl->BindTexture(GL_TEXTURE_2D, temp_texture);
+    GLuint fbo = 0;
+    gl->GenFramebuffers(1, &fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
+    gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                             GL_TEXTURE_2D, temp_texture, 0);
+    // gl->ClearColor(0, 1, 0, 1);
+    // gl->Clear(GL_COLOR_BUFFER_BIT);
 
+    uint32_t result = 0;
+    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
+    // // The expected result is 4278255360.
+    LOG(ERROR) << "====result " << result;
+
+    //    float color[4] = { 0 };
+    //    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, &color);
+    //    LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " <<
+    //    color[2]
+    //    << " " << color[3];
+  }
 
   gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
   auto buffer_handle = gfx::mojom::blink::GpuMemoryBufferHandle::New();
@@ -350,10 +385,9 @@ void Execution::setOutput(uint32_t index,
 }
 
 void Execution::setOutput(uint32_t index,
-                         WebGL2RenderingContext* context,
-                         WebGLTexture* texture,
-                ExceptionState& exception_state) 
-{
+                          WebGL2RenderingContext* context,
+                          WebGLTexture* texture,
+                          ExceptionState& exception_state) {
   // if (index >= inputs_.size()) {
   //   exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
   //                                     "Invalid index");
@@ -363,7 +397,7 @@ void Execution::setOutput(uint32_t index,
   // // std::unique_ptr<OperandInfo>& info = inputs_.at(index);
   // // // 32 is the length of GLuint type, see "typedef unsigned int GLuint".
   // // if (info->length < 32) {
-  // //   exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+  // // exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
   // //                                     "Invalid data");
   // //   return;
   // // }
@@ -381,7 +415,8 @@ void Execution::setOutput(uint32_t index,
   // GLuint texture_id = 0;
   // std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
   // // uint32_t n, width, height, channels;
-  // // if (!GetOperandInfo(operand_info_inputs_[index], n, width, height, channels)) {
+  // // if (!GetOperandInfo(operand_info_inputs_[index], n, width, height,
+  // channels)) {
   // //   return;
   // // }
   // IntSize size(2, 1);
@@ -428,7 +463,8 @@ void Execution::setOutput(uint32_t index,
 
   // gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
   // auto buffer_handle = gfx::mojom::blink::GpuMemoryBufferHandle::New();
-  // buffer_handle->id = gfx::mojom::blink::GpuMemoryBufferId::New(handle.id.id);
+  // buffer_handle->id =
+  // gfx::mojom::blink::GpuMemoryBufferId::New(handle.id.id);
   // buffer_handle->offset = handle.offset;
   // buffer_handle->stride = handle.stride;
   // buffer_handle->platform_handle =

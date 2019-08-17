@@ -161,7 +161,8 @@ void ExecutionImplMacMPS::CreateOutputMTLBuffer() {
 }
 
 void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
-    uint32 index, gfx::GpuMemoryBufferHandle buffer_handle) {
+    uint32 index,
+    gfx::GpuMemoryBufferHandle buffer_handle) {
   LOG(ERROR) << "=====ExecutionImplMacMPS::SetGpuMemoryBufferHandle.";
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
       IOSurfaceLookupFromMachPort(buffer_handle.mach_port.get()));
@@ -174,20 +175,20 @@ void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
                                    cv_pixel_buffer.InitializeInto());
 
   CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
-  const float* src = static_cast<float*>(CVPixelBufferGetBaseAddress(cv_pixel_buffer));
+  const float* src =
+      static_cast<float*>(CVPixelBufferGetBaseAddress(cv_pixel_buffer));
   // const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(cv_pixel_buffer);
   const size_t cv_height = CVPixelBufferGetHeight(cv_pixel_buffer);
   const size_t cv_width = CVPixelBufferGetWidth(cv_pixel_buffer);
-  const OperandMac& operand = compilation_->operands_[index];
-  uint32_t n, width, height, channels;
-  if (!ml::GetMPSImageInfo(operand, n, width, height, channels)) {
-    LOG(ERROR) << "=====Fail to get MPSImage Info.";
-    return;
-  }
-  LOG(ERROR) << "======operand width = " << width << " " << height << " === cv "
-      << cv_width << " " << cv_height;
+  // const OperandMac& operand = compilation_->operands_[index];
+  // uint32_t n, width, height, channels;
+  // if (!ml::GetMPSImageInfo(operand, n, width, height, channels)) {
+  //   LOG(ERROR) << "=====Fail to get MPSImage Info.";
+  //   return;
+  // }
+  LOG(ERROR) << "======operand width = " << cv_width << " " << cv_height;
   for (size_t i = 0; i < cv_width * cv_height; i++) {
-      LOG(ERROR) << "======the data = " << src[i];
+    LOG(ERROR) << "======the data = " << src[i];
   }
 
   CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
@@ -197,8 +198,8 @@ void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {
   DLOG(INFO) << "ExecutionImplMac::StartCompute";
   bool success = true;
   if (@available(macOS 10.13, *)) {
-    SharedMetal* test = [[SharedMetal alloc] initWithTextureSize:CGSizeMake(10, 10)];
-    [test testSharedMetal];
+    // SharedMetal* test = [[SharedMetal alloc]
+    // initWithTextureSize:CGSizeMake(10, 10)]; [test testSharedMetal];
     do {
       @autoreleasepool {
         id<MTLCommandBuffer> command_buffer =
