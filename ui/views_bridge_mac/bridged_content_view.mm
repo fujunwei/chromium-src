@@ -223,8 +223,8 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   // should never be the current input context.
   DCHECK_EQ(nil, [self window]);
   // Sanity check: NSView always provides an -inputContext.
-  DCHECK_NE(nil, [super inputContext]);
-  DCHECK_NE([NSTextInputContext currentInputContext], [super inputContext]);
+//  DCHECK_NE(nil, [super inputContext]);
+//  DCHECK_NE([NSTextInputContext currentInputContext], [super inputContext]);
   [super dealloc];
 }
 

@@ -205,7 +205,6 @@ void Execution::setInput(uint32_t index,
       gpu_memory_buffer.get(), gpu_memory_buffer_manager,
       context->ColorParams().GetStorageGfxColorSpace(),
       gpu::SHARED_IMAGE_USAGE_GLES2 |
-          gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
           gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT);
 
   // Import the allocated SharedImage into GL.
@@ -216,12 +215,12 @@ void Execution::setInput(uint32_t index,
   // gl->DeleteTextures(1, &texture_id);
   // gl_->DeleteFramebuffers(1, &framebuffer);
 
-  gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
-  gl->BeginSharedImageAccessDirectCHROMIUM(
-      texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
+  // gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+  // gl->BeginSharedImageAccessDirectCHROMIUM(
+  //     texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
 
   // Testing.
-  if (false) {
+  if (true) {
     GLuint fbo = 0;
     gl->GenFramebuffers(1, &fbo);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -235,14 +234,99 @@ void Execution::setInput(uint32_t index,
     // // The expected result is 4278255360.
 
     gl->BindTexture(GL_TEXTURE_2D, ObjectOrZero(texture));
-    float dirty_color[4] = {1.3f, 1.4f, 1.5f, 1.0f};
-    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_FLOAT,
+    float dirty_color[16] = {1.31f, 1.4f, 1.5f, 1.6f, 1.7f, 1.8f, 1.9f, 2.0f,
+                             2.3f, 2.4f, 2.5f, 2.6f, 2.7f, 2.8f, 2.9f, 3.0f};
+    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RED, GL_FLOAT,
                       dirty_color);
     gl->Flush();
+    float color[40] = {0};
+    gl->ReadPixels(0, 0, 2, 2, GL_RGBA, GL_FLOAT, &color);
+    for (size_t i = 0; i < 40; i++) {
+      LOG(ERROR) << "======the input data = " << color[i];
+    }
+  }
+
+  if (true) {
+    GLuint fbos[] = {0, 0};
+    gl->GenFramebuffers(2, fbos);
+
+
+    GLuint textures[] = {0, 0};
+    gl->GenTextures(2, textures);
+
+    gl->BindTexture(GL_TEXTURE_2D, ObjectOrZero(texture));
+    unsigned char red[4][3] = {
+      {211, 0, 0},
+      {212, 0, 0},
+      {213, 0, 0},
+      {214, 0, 0}
+    };
+    gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB, GL_UNSIGNED_BYTE, red);
+    gl->GetError();
+
+    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
+    gl->FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ObjectOrZero(texture), 0);
+    gl->GetError();
+    uint32_t result = 0;
+    gl->ReadPixels(0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, &result);
+     // // The expected result is 4278255360.
+     LOG(ERROR) << "====1 result " << result;
+
+    // GLuint rb0;
+    // // Create draw fbo and its color attachment.
+    // gl->GenRenderbuffers(1, &rb0);
+    // gl->BindRenderbuffer(GL_RENDERBUFFER, rb0);
+    // gl->RenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, 2, 2);
+
+    // var fb1 = gl.createFramebuffer();
+    // gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb1);
+    // gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb0);
+    // if (gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+    //     testFailed("Framebuffer incomplete.");
+    //     return;
+    // }
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+    gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
+    gl->ClearColor(0, 1, 1, 1);
+    gl->Clear(GL_COLOR_BUFFER_BIT);
+    // unsigned char black[4][3] = {
+    //   {123, 0, 0},
+    //   {124, 0, 0},
+    //   {125, 0, 0},
+    //   {126, 0, 0}
+    // };
+    // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB, GL_UNSIGNED_BYTE, black);
+    gl->GetError();
+
+    result = 0;
+    if (false) {
+      // gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, NULL);
+      // gl->BindTexture(GL_TEXTURE_2D, NULL);
+      gl->BindFramebuffer(GL_FRAMEBUFFER, fbos[1]);
+      gl->BindTexture(GL_TEXTURE_2D, textures[1]);
+      gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, textures[1], 0);
+      gl->ReadPixels(0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, &result);
+      LOG(ERROR) << "====2 result " << result;
+    }
+
+    // Test that glBlitFramebuffer works as expected for the normal case.
+    context->blitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    gl->GetError();
+
+    gl->BindFramebuffer(GL_FRAMEBUFFER, fbos[1]);
+    gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+    gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                             GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
+    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
+    LOG(ERROR) << "====3 result " << result;
+
     float color[4] = {0};
-    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, &color);
-    LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " << color[2]
-               << " " << color[3];
+    gl->ReadPixels(0, 0, 2, 2, GL_RGBA, GL_HALF_FLOAT, &color);
+    for (size_t i = 0; i < 4; i++) {
+      LOG(ERROR) << "======the input data = " << color[i];
+    }
   }
 
   // gl->CopyTextureCHROMIUM(ObjectOrZero(texture), 0,
@@ -299,7 +383,7 @@ void Execution::setInput(uint32_t index,
   //     color[2];
   // }
   GLuint temp_texture;
-  if (true) {
+  if (false) {
     gl->GenTextures(1, &temp_texture);
     gl->BindTexture(GL_TEXTURE_2D, temp_texture);
     gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 10, 10, 0, GL_RGBA, GL_FLOAT,
@@ -314,7 +398,7 @@ void Execution::setInput(uint32_t index,
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
     // macOS CVPixelBuffer textures created as rectangle textures.
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GL_TEXTURE_2D, temp_texture, 0);
+                             GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
 
     // Initialize the openGL render.
     OpenGLRenderer* render = new OpenGLRenderer(gl);
@@ -331,25 +415,25 @@ void Execution::setInput(uint32_t index,
     gl->Flush();
   }
   if (true) {
-    gl->BindTexture(GL_TEXTURE_2D, temp_texture);
+    gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
     GLuint fbo = 0;
     gl->GenFramebuffers(1, &fbo);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GL_TEXTURE_2D, temp_texture, 0);
+                             GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
     // gl->ClearColor(0, 1, 0, 1);
     // gl->Clear(GL_COLOR_BUFFER_BIT);
 
-    uint32_t result = 0;
-    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
-    // // The expected result is 4278255360.
-    LOG(ERROR) << "====result " << result;
+//    uint32_t result = 0;
+//    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
+//    // // The expected result is 4278255360.
+//    LOG(ERROR) << "====result " << result;
 
-    //    float color[4] = { 0 };
-    //    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, &color);
-    //    LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " <<
-    //    color[2]
-    //    << " " << color[3];
+        float color[4] = { 0 };
+        gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_HALF_FLOAT, &color);
+        LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " <<
+        color[2]
+        << " " << color[3];
   }
 
   gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
