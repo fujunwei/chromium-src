@@ -175,8 +175,8 @@ void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
                                    cv_pixel_buffer.InitializeInto());
 
   CVPixelBufferLockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
-  const float* src =
-      static_cast<float*>(CVPixelBufferGetBaseAddress(cv_pixel_buffer));
+  const __fp16* src =
+      static_cast<__fp16*>(CVPixelBufferGetBaseAddress(cv_pixel_buffer));
   // const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(cv_pixel_buffer);
   const size_t cv_height = CVPixelBufferGetHeight(cv_pixel_buffer);
   const size_t cv_width = CVPixelBufferGetWidth(cv_pixel_buffer);
@@ -186,8 +186,10 @@ void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
   //   LOG(ERROR) << "=====Fail to get MPSImage Info.";
   //   return;
   // }
-  LOG(ERROR) << "======operand width = " << cv_width << " " << cv_height;
-  for (size_t i = 0; i < cv_width * cv_height; i++) {
+  LOG(ERROR) << "======operand width = " << cv_width << " " << cv_height
+             << " format = "
+             << CVPixelBufferGetPixelFormatType(cv_pixel_buffer);
+  for (size_t i = 0; i < cv_width * cv_height * 4; i++) {
     LOG(ERROR) << "======the data = " << src[i];
   }
 
