@@ -68,6 +68,7 @@
 #include "services/media_session/public/mojom/constants.mojom.h"
 #include "services/metrics/metrics_mojo_service.h"
 #include "services/metrics/public/mojom/constants.mojom.h"
+#include "services/ml/ml_service.h"
 #include "services/ml/public/mojom/constants.mojom.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cross_thread_shared_url_loader_factory_info.h"
@@ -86,8 +87,6 @@
 #include "services/tracing/public/cpp/tracing_features.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "services/tracing/tracing_service.h"
-#include "services/ml/ml_service.h"
-#include "services/ml/public/mojom/constants.mojom.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/ui_base_features.h"
 
@@ -140,7 +139,9 @@ service_manager::Manifest GetContentSystemManifest() {
   return manifest;
 }
 
-void DestroyConnectorOnIOThread() { g_io_thread_connector.Get().reset(); }
+void DestroyConnectorOnIOThread() {
+  g_io_thread_connector.Get().reset();
+}
 
 // A ServiceProcessHost implementation which delegates to Content-managed
 // processes, either via a new UtilityProcessHost to launch new service
@@ -430,6 +431,8 @@ class BrowserServiceManagerDelegate
     if (identity.name() == media::mojom::kMediaServiceName)
       run_in_gpu_process = true;
 #endif
+    if (identity.name() == ml::mojom::kServiceName)
+      run_in_gpu_process = true;
     return std::make_unique<ContentChildServiceProcessHost>(run_in_gpu_process,
                                                             child_flags);
   }

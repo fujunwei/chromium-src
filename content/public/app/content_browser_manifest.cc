@@ -274,7 +274,7 @@ const service_manager::Manifest& GetContentBrowserManifest() {
                   "media.mojom.Renderer",
                   "media.mojom.VideoDecodePerfHistory",
                   "mojom.ProcessInternalsHandler",
-                  "ml::mojom::NeuralNetwork",
+                  "ml.mojom.NeuralNetwork",
                   "network.mojom.RestrictedCookieManager",
                   "blink.mojom.WebSocketConnector",
                   "payments.mojom.PaymentManager",

@@ -24,6 +24,7 @@
 #include "services/device/public/cpp/manifest.h"
 #include "services/media_session/public/cpp/manifest.h"
 #include "services/metrics/public/cpp/manifest.h"
+#include "services/ml/public/cpp/manifest.h"
 #include "services/network/public/cpp/manifest.h"
 #include "services/resource_coordinator/public/cpp/manifest.h"
 #include "services/service_manager/public/cpp/manifest_builder.h"
@@ -64,6 +65,7 @@ const std::vector<service_manager::Manifest>& GetBuiltinServiceManifests() {
           media::GetCdmManifest(),
 #endif
           media::GetMediaManifest(),
+          ml::GetManifest(),
           data_decoder::GetManifest(),
           device::GetManifest(),
           media_session::GetManifest(),
