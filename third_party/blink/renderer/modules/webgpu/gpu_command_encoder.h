@@ -39,6 +39,7 @@ class GPUCommandEncoder : public DawnObject<DawnCommandEncoder> {
                           GPUBuffer* dst,
                           uint64_t dst_offset,
                           uint64_t size);
+  void shareBufferToWebml(GPUBuffer* src, uint32_t index);
   void copyBufferToTexture(GPUBufferCopyView* source,
                            GPUTextureCopyView* destination,
                            GPUExtent3D* copy_size);

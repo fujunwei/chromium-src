@@ -15,6 +15,9 @@
         GPUBuffer dst, unsigned long long dstOffset,
         unsigned long long size);
 
+    void shareBufferToWebml(
+        GPUBuffer src, unsigned long index);
+
     void copyBufferToTexture(
         GPUBufferCopyView source,
         GPUTextureCopyView destination,

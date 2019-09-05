@@ -226,6 +226,7 @@ source_set("lib") {
   deps = [
     "//mojo/public/cpp/bindings",
     "//skia",
+    "//third_party/dawn:libdawn_native"
   ]
 
   if (is_win || is_linux) {
@@ -245,6 +246,7 @@ source_set("lib") {
     "//base",
     "//services/ml/public/mojom",
     "//services/service_manager/public/cpp",
+    "//third_party/dawn/src/dawn:dawn_headers",
   ]
 
   if (is_linux) {

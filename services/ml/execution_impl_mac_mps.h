@@ -44,9 +44,7 @@ class ExecutionImplMacMPS : public mojom::Execution {
 
   void API_AVAILABLE(macos(10_13)) UploadToMPSImage(const MPSImage*,
                                                     const id<MTLBuffer>&,
-                                                    const id<MTLCommandBuffer>&,
-                                                    const void*,
-                                                    size_t);
+                                                    const id<MTLCommandBuffer>&);
 
   base::WeakPtr<CompilationImplMac> compilation_;
 

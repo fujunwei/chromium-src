@@ -41,6 +41,7 @@ class Execution final : public ScriptWrappable {
   ~Execution() override;
 
   void setInput(uint32_t, MaybeShared<DOMArrayBufferView>, ExceptionState&);
+  // void setInput(GPUBuffer* buffer, ExceptionState&);
   void setOutput(uint32_t, MaybeShared<DOMArrayBufferView>, ExceptionState&);
   ScriptPromise startCompute(ScriptState*);
 

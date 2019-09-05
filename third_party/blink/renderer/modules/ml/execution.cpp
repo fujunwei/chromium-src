@@ -98,6 +98,10 @@ void Execution::setInput(uint32_t index,
          length);
 }
 
+// void Execution::setInput(GPUBuffer* buffer,
+//                          ExceptionState& exception_state) {
+// }
+
 void Execution::setOutput(uint32_t index,
                           MaybeShared<DOMArrayBufferView> data,
                           ExceptionState& exception_state) {

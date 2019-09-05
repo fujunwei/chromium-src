@@ -5,6 +5,7 @@
 #include "services/ml/mpscnn_context.h"
 #include "base/logging.h"
 
+#include <dawn_native/MetalBackend.h>
 #import <Metal/MTLFunctionConstantValues.h>
 
 namespace ml {
@@ -151,13 +152,14 @@ MPSCNNContext& GetMPSCNNContext() {
   static MPSCNNContext ctx;
   if (!ctx.initialized) {
     ctx.initialized = true;
-
-    ctx.device = MTLCreateSystemDefaultDevice();
+    
+    id<MTLDevice> shared_device = dawn_native::metal::GetSharedMetalDevice();
+    ctx.device = shared_device == nil ? MTLCreateSystemDefaultDevice() : shared_device;
     if (ctx.device == nil) {
-      DLOG(ERROR) << "Cannot create MTLDevice";
+      LOG(ERROR) << "Cannot create MTLDevice";
       return ctx;
     } else {
-      DLOG(INFO) << "Created MTLDevice: " << ctx.device.name.UTF8String;
+      LOG(ERROR) << "Created MTLDevice: " << ctx.device.name.UTF8String;
     }
 
     NSError* compileError = nil;

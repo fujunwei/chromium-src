@@ -227,6 +227,10 @@ void GPUCommandEncoder::copyBufferToBuffer(GPUBuffer* src,
                                               dst_offset, size);
 }
 
+void GPUCommandEncoder::shareBufferToWebml(GPUBuffer* src, uint32_t index) {
+  GetProcs().commandEncoderShareBufferToWebml(GetHandle(), src->GetHandle(), index);
+}
+
 void GPUCommandEncoder::copyBufferToTexture(GPUBufferCopyView* source,
                                             GPUTextureCopyView* destination,
                                             GPUExtent3D* copy_size) {
