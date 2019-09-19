@@ -170,6 +170,20 @@ void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
     LOG(ERROR) << "Failed to open IOSurface via mach port.";
   }
 
+  // MTLTextureDescriptor* textureDescriptor = [MTLTextureDescriptor
+  //     texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float
+  //                                  width:4
+  //                                 height:4
+  //                              mipmapped:NO];
+  // id<MTLTexture> metalTexture = [GetMPSCNNContext().device newTextureWithDescriptor:textureDescriptor
+  //                                              iosurface:io_surface
+  //                                                  plane:0];
+
+  // size_t bytes_per_row = IOSurfaceGetBytesPerRow(io_surface);
+  // const __fp16* src =
+  //     static_cast<__fp16*>(IOSurfaceGetBaseAddress(io_surface));
+  // LOG(ERROR) << "======the IOSurfaceGetBytesPerRow = " << bytes_per_row;
+
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
   CVPixelBufferCreateWithIOSurface(nullptr, io_surface, nullptr,
                                    cv_pixel_buffer.InitializeInto());
@@ -189,11 +203,11 @@ void ExecutionImplMacMPS::SetGpuMemoryBufferHandle(
   LOG(ERROR) << "======operand width = " << cv_width << " " << cv_height
              << " format = "
              << CVPixelBufferGetPixelFormatType(cv_pixel_buffer);
-  for (size_t i = 0; i < cv_width * cv_height * 4; i++) {
+  for (size_t i = 0; i < 4 * 4 * 4; i++) {
     LOG(ERROR) << "======the data = " << src[i];
   }
 
-  CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
+  // CVPixelBufferUnlockBaseAddress(cv_pixel_buffer, kCVPixelBufferLock_ReadOnly);
 }
 
 void ExecutionImplMacMPS::StartCompute(StartComputeCallback callback) {

@@ -233,8 +233,8 @@ void OpenGLRenderer::Draw(GLuint frameBufferName,
             GLuint texName) {
   gl_->BindFramebuffer(GL_FRAMEBUFFER, frameBufferName);
 
-  // gl_->ClearColor(0, 1, 0, 1);
-  // gl_->Clear(GL_COLOR_BUFFER_BIT);
+  gl_->ClearColor(0, 1, 0, 1);
+  gl_->Clear(GL_COLOR_BUFFER_BIT);
 
   gl_->UseProgram(_programName);
 

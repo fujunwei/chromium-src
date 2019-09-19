@@ -186,4 +186,9 @@ int32_t ExecutionImplMklDnn::MkldnnExecuteReshape(
   return mojom::NOT_ERROR;
 }
 
+void ExecutionImplMklDnn::SetGpuMemoryBufferHandle(
+    uint32_t index, gfx::GpuMemoryBufferHandle handle) {
+  NOTREACHED();
+}
+
 }  // namespace ml

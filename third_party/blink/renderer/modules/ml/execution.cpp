@@ -22,7 +22,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
-#include "ui/gfx/mojo/buffer_types.mojom-blink.h"
+#include "ui/gfx/mojom/buffer_types.mojom-blink.h"
 
 #include "third_party/blink/renderer/modules/ml/vertex_shader.h"
 
@@ -171,16 +171,16 @@ void Execution::setInput(uint32_t index,
   gpu::gles2::GLES2Interface* gl = drawing_buffer->ContextGL();
   WebGraphicsContext3DProvider* context_provider =
       drawing_buffer->ContextProvider();
-  {
-    WTF::String vertSourceString(VERTEX_SHADER);
-    WebGLShader* shader = context->createShader(GL_VERTEX_SHADER);
-    context->shaderSource(shader, vertSourceString);
+  // {
+  //   WTF::String vertSourceString(VERTEX_SHADER);
+  //   WebGLShader* shader = context->createShader(GL_VERTEX_SHADER);
+  //   context->shaderSource(shader, vertSourceString);
 
-    context->compileShader(shader);
+  //   context->compileShader(shader);
 
-    LOG(ERROR) << "======== Vtx Shader compile log:"
-               << context->getShaderInfoLog(shader);
-  }
+  //   LOG(ERROR) << "======== Vtx Shader compile log:"
+  //              << context->getShaderInfoLog(shader);
+  // }
 
   gpu::SharedImageInterface* sii = context_provider->SharedImageInterface();
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
@@ -194,9 +194,9 @@ void Execution::setInput(uint32_t index,
   // channels)) {
   //   return;
   // }
-  IntSize size(3, 3);
+  IntSize size(10, 10);
   gpu_memory_buffer = gpu_memory_buffer_manager->CreateGpuMemoryBuffer(
-      gfx::Size(size), gfx::BufferFormat::RGBA_F16, gfx::BufferUsage::SCANOUT,
+      gfx::Size(size), gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::SCANOUT,
       gpu::kNullSurfaceHandle);
   if (!gpu_memory_buffer)
     return;
@@ -204,7 +204,8 @@ void Execution::setInput(uint32_t index,
   mailbox = sii->CreateSharedImage(
       gpu_memory_buffer.get(), gpu_memory_buffer_manager,
       context->ColorParams().GetStorageGfxColorSpace(),
-      gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY |
+      gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+          gpu::SHARED_IMAGE_USAGE_DISPLAY |
           gpu::SHARED_IMAGE_USAGE_SCANOUT);
 
   // Import the allocated SharedImage into GL.
@@ -215,15 +216,14 @@ void Execution::setInput(uint32_t index,
   // gl->DeleteTextures(1, &texture_id);
   // gl_->DeleteFramebuffers(1, &framebuffer);
 
-  // gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+  gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
   gl->BeginSharedImageAccessDirectCHROMIUM(
       texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
 
-  // Testing.
   if (true) {
-    GLuint fbo = 0;
-    gl->GenFramebuffers(1, &fbo);
-    gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
+    GLuint sample_fbo = 0;
+    gl->GenFramebuffers(1, &sample_fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, sample_fbo);
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                              GL_TEXTURE_2D, ObjectOrZero(texture), 0);
     // gl->ClearColor(0, 1, 0, 1);
@@ -244,113 +244,58 @@ void Execution::setInput(uint32_t index,
     for (size_t i = 0; i < 16; i++) {
       LOG(ERROR) << "======the input data = " << color[i];
     }
-  }
 
-  if (true) {
-    GLuint fbos[] = {0, 0};
-    gl->GenFramebuffers(2, fbos);
-
-    GLuint textures[] = {0, 0};
-    gl->GenTextures(2, textures);
-
-    gl->BindTexture(GL_TEXTURE_2D, ObjectOrZero(texture));
-    // unsigned char red[4][3] = {
-    //   {231, 0, 0},
-    //   {212, 0, 0},
-    //   {213, 0, 0},
-    //   {214, 0, 0}
-    // };
-    // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB,
-    // GL_UNSIGNED_BYTE, red);
-    gl->GetError();
-
-    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, fbos[0]);
-    gl->FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GL_TEXTURE_2D, ObjectOrZero(texture), 0);
-    gl->GetError();
-    uint32_t result = 0;
-    // gl->ReadPixels(0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, &result);
-    //  // // The expected result is 4278255360.
-    //  LOG(ERROR) << "====1 result " << result;
-
-    // GLuint rb0;
-    // // Create draw fbo and its color attachment.
-    // gl->GenRenderbuffers(1, &rb0);
-    // gl->BindRenderbuffer(GL_RENDERBUFFER, rb0);
-    // gl->RenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, 2, 2);
-
-    // var fb1 = gl.createFramebuffer();
-    // gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb1);
-    // gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
-    // gl.RENDERBUFFER, rb0); if (gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER)
-    // != gl.FRAMEBUFFER_COMPLETE) {
-    //     testFailed("Framebuffer incomplete.");
-    //     return;
-    // }
-    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, fbos[1]);
+    // Create another FBO to resolve the multisample buffer into.
+    GLuint resolve_fbo, resolve_tex;
+    gl->GenTextures(1, &resolve_tex);
     gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
-    gl->Viewport(0, 0, 3, 3);
-    gl->ClearColor(0, 1, 0, 1);
-    // gl->Clear(GL_COLOR_BUFFER_BIT);
-    // GLuint image_id = gl->CreateImageCHROMIUM(
-    //   gpu_memory_buffer->AsClientBuffer(), 2,
-    //   2, GL_RGBA);
-    // gl->BindTexImage2DCHROMIUM(GC3D_TEXTURE_RECTANGLE_ARB, image_id);
-    // gl->TexImage2D(GC3D_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA16F, 2, 2, 0,
-    // GL_RGBA, GL_FLOAT,
-    //                   NULL);
-    // gl->TexImage2D(GC3D_TEXTURE_RECTANGLE_ARB, 0, 0, 0, 2, 2, GL_RGBA,
-    // GL_UNSIGNED_BYTE,
-    //                   red);
-    gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
-    // gl->ClearColor(0, 1, 1, 1);
-    gl->Clear(GL_COLOR_BUFFER_BIT);
-    // unsigned char black[4][3] = {
-    //   {123, 0, 0},
-    //   {124, 0, 0},
-    //   {125, 0, 0},
-    //   {126, 0, 0}
-    // };
-    // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB,
-    // GL_UNSIGNED_BYTE, black);
-    gl->GetError();
+    // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, 4, 0, GL_RGBA,
+    //              GL_FLOAT, nullptr);
+    gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    gl->GenFramebuffers(1, &resolve_fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, resolve_fbo);
+    gl->FramebufferTexture2D(GL_FRAMEBUFFER,
+                           GL_COLOR_ATTACHMENT0,
+                           GC3D_TEXTURE_RECTANGLE_ARB,
+                           texture_id,
+                           0);
+    // Resolve.
+    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, sample_fbo);
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_fbo);
+    // gl->BlitFramebufferCHROMIUM(0,
+    //                           0,
+    //                           4,
+    //                           4,
+    //                           0,
+    //                           0,
+    //                           4,
+    //                           4,
+    //                           GL_COLOR_BUFFER_BIT,
+    //                           GL_NEAREST);
+    gl->DeleteFramebuffers(1, &sample_fbo);
 
-    result = 0;
-    if (false) {
-      // gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, NULL);
-      // gl->BindTexture(GL_TEXTURE_2D, NULL);
-      gl->BindFramebuffer(GL_FRAMEBUFFER, fbos[1]);
-      gl->BindTexture(GL_TEXTURE_2D, textures[1]);
-      gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, textures[1], 0);
-      gl->ReadPixels(0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, &result);
-      LOG(ERROR) << "====2 result " << result;
-    }
-
-    // Test that glBlitFramebuffer works as expected for the normal case.
-    context->blitFramebuffer(0, 0, 2, 2, 0, 0, 2, 2, GL_COLOR_BUFFER_BIT,
-                             GL_NEAREST);
-    gl->GetError();
-
-    gl->BindFramebuffer(GL_FRAMEBUFFER, fbos[1]);
     gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, resolve_fbo);
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                              GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
-    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
-    LOG(ERROR) << "====3 result " << result;
+
+    gl->ClearColor(33.0 / 255.0, 44.0 / 255.0, 55.0 / 255.0, 66.0 / 255.0);
+    gl->Clear(GL_COLOR_BUFFER_BIT);
+    gl->Flush();
 
     GLint format = 0;
     GLint type = 0;
     gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &format);
     gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &type);
     LOG(ERROR) << format << " " << type;
-    float color[4] = {0};
-    gl->ReadPixels(0, 0, 2, 2, format, type, &color);
+    float color_new[4 * 4] = {0};
+    gl->ReadPixels(0, 0, 2, 2, format, type, &color_new);
     for (size_t i = 0; i < 4 * 4; i++) {
-      LOG(ERROR) << "======the input data = "
-                 << static_cast<int>(
-                        (reinterpret_cast<unsigned char*>(color))[i]);
+      LOG(ERROR) << "======the 1111input data = "
+                 << color[i];
     }
   }
 
@@ -441,23 +386,32 @@ void Execution::setInput(uint32_t index,
   }
   if (false) {
     gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+
+    gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    // gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     GLuint fbo = 0;
     gl->GenFramebuffers(1, &fbo);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
-    // gl->ClearColor(0, 1, 0, 1);
-    // gl->Clear(GL_COLOR_BUFFER_BIT);
+                             GL_TEXTURE_RECTANGLE, texture_id, 0);
+    gl->Viewport(0, 0, 10, 10);
+    gl->ClearColor(33.0 / 255.0, 44.0 / 255.0, 55.0 / 255.0, 66.0 / 255.0);
+    gl->Clear(GL_COLOR_BUFFER_BIT);
+    gl->Flush();
 
-    //    uint32_t result = 0;
-    //    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &result);
-    //    // // The expected result is 4278255360.
-    //    LOG(ERROR) << "====result " << result;
-
-    float color[4] = {0};
-    gl->ReadPixels(0, 0, 1, 1, GL_RGBA, GL_HALF_FLOAT, &color);
-    LOG(ERROR) << "====pixel " << color[0] << " " << color[1] << " " << color[2]
-               << " " << color[3];
+    char color[4 * 4] = {0};
+    GLint format = 0;
+    GLint type = 0;
+    gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &format);
+    gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &type);
+    gl->ReadPixels(0, 0, 2, 2, format, type, &color);
+    for (size_t i = 0; i < 4 * 4; i++) {
+      LOG(ERROR) << "======the data after clear color = "
+                 << static_cast<int>(
+                        (reinterpret_cast<unsigned char*>(color))[i]);
+    }
   }
 
   gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
