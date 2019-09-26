@@ -431,6 +431,7 @@ class SharedImageBackingIOSurface : public SharedImageBacking {
   std::unique_ptr<SharedImageRepresentationGLTexture> ProduceGLTexture(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker) final {
+    LOG(ERROR) << "=======SharedImageRepresentationGLTexture ProduceGLTexture";
     gles2::Texture* texture = GenGLTexture();
     if (!texture) {
       return nullptr;
@@ -533,6 +534,7 @@ class SharedImageBackingIOSurface : public SharedImageBacking {
       api->glDeleteTexturesFn(1, &service_id);
       return nullptr;
     }
+    LOG(ERROR) << "===== BindTexImage " << size().ToString();
 
     // If the backing is already cleared, no need to clear it again.
     gfx::Rect cleared_rect;

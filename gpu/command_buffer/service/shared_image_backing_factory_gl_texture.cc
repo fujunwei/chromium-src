@@ -479,6 +479,7 @@ class SharedImageBackingGLTexture : public SharedImageBackingWithReadAccess {
   std::unique_ptr<SharedImageRepresentationGLTexture> ProduceGLTexture(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker) override {
+    LOG(ERROR) << "=======2222 SharedImageRepresentationGLTexture ProduceGLTexture";
     return std::make_unique<SharedImageRepresentationGLTextureImpl>(
         manager, this, tracker, texture_);
   }

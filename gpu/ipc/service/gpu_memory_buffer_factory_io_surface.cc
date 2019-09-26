@@ -40,6 +40,7 @@ GpuMemoryBufferFactoryIOSurface::CreateGpuMemoryBuffer(
     int client_id,
     SurfaceHandle surface_handle) {
   DCHECK_NE(client_id, kAnonymousClientId);
+  LOG(ERROR) << "=====GpuMemoryBufferFactoryIOSurface::CreateGpuMemoryBuffer";
 
   bool should_clear = true;
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
@@ -123,6 +124,7 @@ GpuMemoryBufferFactoryIOSurface::CreateImageForGpuMemoryBuffer(
     return scoped_refptr<gl::GLImage>();
   }
 
+  LOG(ERROR) << "=====GpuMemoryBufferFactoryIOSurface::CreateImageForGpuMemoryBuffer";
   unsigned internalformat = gpu::InternalFormatForGpuMemoryBufferFormat(format);
   scoped_refptr<gl::GLImageIOSurface> image(
       gl::GLImageIOSurface::Create(size, internalformat));

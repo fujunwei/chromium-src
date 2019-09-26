@@ -8785,6 +8785,7 @@ void GLES2DecoderImpl::DoBlitFramebufferCHROMIUM(
   // draw framebuffer as incomplete. Framebuffer::GetFramebufferValidSize()
   // requires the framebuffer to be complete.
   gfx::Size draw_size = GetBoundDrawFramebufferSize();
+  LOG(ERROR) << " ==== 111 DoBlitFramebufferCHROMIUM" << draw_size.ToString();
 
   if (!CheckFramebufferValid(GetBoundReadFramebuffer(),
                              GetReadFramebufferTarget(),
@@ -18494,6 +18495,9 @@ void GLES2DecoderImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
                        "client id already in use");
     return;
   }
+  
+//  LOG(ERROR) << "=======DoCreateAndTexStorage2DSharedImageINTERNAL " << internal_format <<
+//      " " << GL_RGB << " " << GL_NONE;
 
   std::unique_ptr<SharedImageRepresentationGLTexture> shared_image;
   if (internal_format == GL_RGB) {

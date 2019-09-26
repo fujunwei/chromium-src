@@ -194,7 +194,7 @@ void Execution::setInput(uint32_t index,
   // channels)) {
   //   return;
   // }
-  IntSize size(10, 10);
+  IntSize size(2, 2);
   gpu_memory_buffer = gpu_memory_buffer_manager->CreateGpuMemoryBuffer(
       gfx::Size(size), gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::SCANOUT,
       gpu::kNullSurfaceHandle);
@@ -203,10 +203,12 @@ void Execution::setInput(uint32_t index,
 
   mailbox = sii->CreateSharedImage(
       gpu_memory_buffer.get(), gpu_memory_buffer_manager,
-      context->ColorParams().GetStorageGfxColorSpace(),
+      gfx::ColorSpace::CreateSRGB(),
       gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
           gpu::SHARED_IMAGE_USAGE_DISPLAY |
           gpu::SHARED_IMAGE_USAGE_SCANOUT);
+  // gl::GLImplementation impl = gl::GetGLImplementation();
+  // gl::SetGLImplementation(gl::kGLImplementationNone);
 
   // Import the allocated SharedImage into GL.
   gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
@@ -216,16 +218,25 @@ void Execution::setInput(uint32_t index,
   // gl->DeleteTextures(1, &texture_id);
   // gl_->DeleteFramebuffers(1, &framebuffer);
 
-  gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
-  gl->BeginSharedImageAccessDirectCHROMIUM(
-      texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
+  // gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+  // gl->BeginSharedImageAccessDirectCHROMIUM(
+  //     texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
+  // GLuint image_id =
+  //     gl->CreateImageCHROMIUM(gpu_memory_buffer->AsClientBuffer(), 10, 10, GL_RGBA);
+  // LOG(ERROR) << "=======image_id " <<image_id;
+  // gl->BindTexImage2DCHROMIUM(GC3D_TEXTURE_RECTANGLE_ARB, image_id);
+  if (true) {
+    // gl->Viewport(0, 0, 10, 10);
+    // gl->ClearColor(1, 1, 0, 1);
+    // gl->Clear(GL_COLOR_BUFFER_BIT);
+
+    // gl->EndSharedImageAccessDirectCHROMIUM(texture_id);
+    // gl->DeleteTextures(1, &texture_id);
+
+    // gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+  }
 
   if (true) {
-    GLuint sample_fbo = 0;
-    gl->GenFramebuffers(1, &sample_fbo);
-    gl->BindFramebuffer(GL_FRAMEBUFFER, sample_fbo);
-    gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GL_TEXTURE_2D, ObjectOrZero(texture), 0);
     // gl->ClearColor(0, 1, 0, 1);
     // gl->Clear(GL_COLOR_BUFFER_BIT);
 
@@ -238,6 +249,12 @@ void Execution::setInput(uint32_t index,
                              2.3f,  2.4f, 2.5f, 2.6f, 2.7f, 2.8f, 2.9f, 3.0f};
     gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 2, 2, 0, GL_RGBA, GL_FLOAT,
                    dirty_color);
+
+    GLuint sample_fbo = 0;
+    gl->GenFramebuffers(1, &sample_fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, sample_fbo);
+    gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                             GL_TEXTURE_2D, ObjectOrZero(texture), 0);
     gl->Flush();
     float color[16] = {0};
     gl->ReadPixels(0, 0, 2, 2, GL_RGBA, GL_FLOAT, &color);
@@ -249,6 +266,8 @@ void Execution::setInput(uint32_t index,
     GLuint resolve_fbo, resolve_tex;
     gl->GenTextures(1, &resolve_tex);
     gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
+    gl->BeginSharedImageAccessDirectCHROMIUM(
+        texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
     // gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, 4, 0, GL_RGBA,
     //              GL_FLOAT, nullptr);
     gl->TexParameteri(GC3D_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -265,16 +284,17 @@ void Execution::setInput(uint32_t index,
     // Resolve.
     gl->BindFramebuffer(GL_READ_FRAMEBUFFER, sample_fbo);
     gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, resolve_fbo);
-    // gl->BlitFramebufferCHROMIUM(0,
-    //                           0,
-    //                           4,
-    //                           4,
-    //                           0,
-    //                           0,
-    //                           4,
-    //                           4,
-    //                           GL_COLOR_BUFFER_BIT,
-    //                           GL_NEAREST);
+    gl->BlitFramebufferCHROMIUM(0,
+                              0,
+                              2,
+                              2,
+                              0,
+                              0,
+                              2,
+                              2,
+                              GL_COLOR_BUFFER_BIT,
+                              GL_NEAREST);
+    gl->ShallowFlushCHROMIUM();
     gl->DeleteFramebuffers(1, &sample_fbo);
 
     gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, texture_id);
@@ -282,8 +302,8 @@ void Execution::setInput(uint32_t index,
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                              GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0);
 
-    gl->ClearColor(33.0 / 255.0, 44.0 / 255.0, 55.0 / 255.0, 66.0 / 255.0);
-    gl->Clear(GL_COLOR_BUFFER_BIT);
+    // gl->ClearColor(33.0 / 255.0, 44.0 / 255.0, 55.0 / 255.0, 66.0 / 255.0);
+    // gl->Clear(GL_COLOR_BUFFER_BIT);
     gl->Flush();
 
     GLint format = 0;
@@ -297,29 +317,22 @@ void Execution::setInput(uint32_t index,
       LOG(ERROR) << "======the 1111input data = "
                  << color[i];
     }
+    // gl->CopyTextureCHROMIUM(ObjectOrZero(texture), 0,
+    //                       GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0, format,
+    //                       type, false, false, false);
   }
 
   // gl->CopyTextureCHROMIUM(ObjectOrZero(texture), 0,
   //                         GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0, GL_RGBA,
   //                         GL_FLOAT, false, true, false);
 
-  // GLboolean unpack_premultiply_alpha_needed = GL_FALSE;
-  // GLboolean unpack_unpremultiply_alpha_needed = GL_FALSE;
-  // // if (want_alpha_channel_ && premultiplied_alpha_ && !premultiply_alpha)
-  // //   unpack_unpremultiply_alpha_needed = GL_TRUE;
-  // // else if (want_alpha_channel_ && !premultiplied_alpha_ &&
-  // premultiply_alpha)
-  // //   unpack_premultiply_alpha_needed = GL_TRUE;
-
-  // gl->BeginSharedImageAccessDirectCHROMIUM(
-  //     src_texture, GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-  // dst_gl->CopySubTextureCHROMIUM(
-  //     src_texture, 0, dst_texture_target, dst_texture, dst_level,
-  //     dst_texture_offset.X(), dst_texture_offset.Y(), src_sub_rectangle.X(),
-  //     src_sub_rectangle.Y(), src_sub_rectangle.Width(),
-  //     src_sub_rectangle.Height(), flip_y, unpack_premultiply_alpha_needed,
-  //     unpack_unpremultiply_alpha_needed);
-  // dst_gl->EndSharedImageAccessDirectCHROMIUM(src_texture);
+  // gl->CopySubTextureCHROMIUM(
+  //     ObjectOrZero(texture), 0, GC3D_TEXTURE_RECTANGLE_ARB, texture_id, 0,
+  //     0, 0, 
+  //     0, 0, 4, 4, GL_FALSE, GL_FALSE,
+  //     GL_FALSE);
+  // gl->ShallowFlushCHROMIUM();
+  // gl->EndSharedImageAccessDirectCHROMIUM(ObjectOrZero(texture));
   // dst_gl->DeleteTextures(1, &src_texture);
 
   //     {
@@ -360,7 +373,7 @@ void Execution::setInput(uint32_t index,
                    NULL);
   }
 
-  if (false) {
+  if (true) {
     GLuint fbo = 0;
     // Create a "frameBufferObject" with the interop texture as the color
     // buffer.
